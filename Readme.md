@@ -1,4 +1,4 @@
-# Followup Request Listener
+# Crossmatch Alert to Skymaps
 
 A Python service that listens for skyportal new objects and filters them by crossmatching with recent skymaps.
 
