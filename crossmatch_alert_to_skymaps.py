@@ -3,6 +3,8 @@ import time
 
 import astropy.units as u
 from datetime import datetime, timedelta
+
+from astropy.time import Time
 from dotenv import load_dotenv
 
 from api import SkyPortal
@@ -16,6 +18,22 @@ allocation_id = os.getenv("ALLOCATION_ID")
 group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 
 def is_obj_in_localizations(ra, dec, localizations):
+    """
+    Check if an object is within any of the provided localizations.
+    Parameters
+    ----------
+    ra : float
+        Right Ascension of the object in degrees.
+    dec : float
+        Declination of the object in degrees.
+    localizations : list of tuples
+        List of tuples where each tuple contains a localization ID and its corresponding MOC.
+
+    Returns
+    -------
+    list
+        List of localization IDs that contain the object.
+    """
     matching_localizations = [
         loc_id
         for loc_id, moc in localizations
@@ -23,13 +41,36 @@ def is_obj_in_localizations(ra, dec, localizations):
     ]
     return matching_localizations
 
+def is_obj_valid(obj, snr_threshold, datetime_cutoff):
+    """
+    Check if an object has its first detection passing the SNR threshold within the given datetime cutoff.
+
+    Parameters
+    ----------
+    obj : dict
+        Object dictionary containing a "photometry" key (list of dicts).
+    snr_threshold : float
+        Minimum required signal-to-noise ratio.
+    datetime_cutoff : datetime
+        Invalidates objects with first detection before this datetime.
+
+    Returns
+    -------
+    bool
+        True if the first valid detection is within cutoff, False otherwise.
+    """
+    for phot in sorted(obj.get("photometry", []), key=lambda p: p.get("mjd")):
+        if phot["flux"] and phot["fluxerr"] and phot["flux"] / phot["fluxerr"] >= snr_threshold:
+            return phot["mjd"] >= Time(datetime_cutoff).mjd
+    return False
+
 def crossmatch_alert_to_skymaps():
     # Start by checking GCNs and objects from the last 2 days
     two_days_ago = datetime.utcnow() - timedelta(days=2)
     latest_gcn_date_obs = two_days_ago
     latest_obj_refresh = two_days_ago
     cumulative_probability = 0.95
-    snr_threshold = 5.0  # Minimum SNR for photometry to consider an object, TODO: implement this filter
+    snr_threshold = 5.0
     skymaps = None
     skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
 
@@ -50,22 +91,30 @@ def crossmatch_alert_to_skymaps():
         # Retrieve objects created after last refresh time
         payload = {
             "startDate": latest_obj_refresh,
-            "firstDetectionAfter": datetime.utcnow() - timedelta(days=3),
+            "includePhotometry": True,
         }
         if group_ids_to_listen:
             payload["groupIDs"] = group_ids_to_listen
         latest_obj_refresh=datetime.utcnow() # Update the refresh time before the query
-        objs = skyportal.get_objects(payload)
         start_time = time.time()
+        objs = skyportal.get_objects(payload)
+        if objs:
+            print(f"Fetching {len(objs)} objects from skymaps took {time.time() - start_time:.2f} seconds")
         crossmatches = []
+        start_time = time.time()
+        invalid_objs_count = 0
         for obj in objs:
+            if not is_obj_valid(obj, snr_threshold, datetime.utcnow() - timedelta(days=2)):
+                invalid_objs_count += 1
+                continue
+
             if skymaps and is_obj_in_localizations(obj["ra"], obj["dec"], skymaps):
                 crossmatches.append(obj)
                 # TODO: Do something with the object, e.g., publish somewhere
 
         if len(objs) > 0:
-            print(f"Crossmatching {len(objs)} objects took {time.time() - start_time:.2f} seconds")
-            print(f"Found {len(crossmatches)} objects in skymaps out of {len(objs)} new objects")
+            print(f"Crossmatching {len(objs)-invalid_objs_count} objects took {time.time() - start_time:.2f} seconds")
+            print(f"Found {invalid_objs_count} invalid objects and {len(crossmatches)} crossmatches with skymaps\n")
         else:
             print("No new objects to crossmatch. Waiting...")
 
