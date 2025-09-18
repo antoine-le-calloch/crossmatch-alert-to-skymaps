@@ -1,0 +1,5 @@
+astropy
+mocpy
+requests
+dotenv
+numpy
