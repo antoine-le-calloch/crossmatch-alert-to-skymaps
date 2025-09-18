@@ -1,3 +1,4 @@
+import io
 import requests
 
 class SkyPortal:
@@ -80,7 +81,7 @@ class SkyPortal:
         )
         return response.status_code == 200
 
-    def api(self, method: str, endpoint: str, data=None, return_raw=False):
+    def api(self, method: str, endpoint: str, data=None, return_response=False):
         """
         Make an API request to SkyPortal
 
@@ -92,8 +93,8 @@ class SkyPortal:
             API endpoint to query
         data : dict, optional
             JSON data to send with the request, as parameters or payload
-        return_raw : bool, optional
-            If True, return raw response text instead of JSON
+        return_response : bool, optional
+            If True, return the raw response instead of parsing JSON
 
         Returns
         -------
@@ -108,12 +109,71 @@ class SkyPortal:
         else:
             response = requests.request(method, endpoint, json=data, headers=self.headers)
 
-        if return_raw:
-            return response.status_code, response.text
+        if return_response:
+            return response
 
         try:
             body = response.json()
         except Exception:
             raise ValueError(f'Error parsing JSON response: {response.text}')
-        
-        return response.status_code, body
+
+        if response.status_code != 200:
+            raise ValueError(f'Error in API request: {body}')
+
+        return body.get('data')
+
+    def get_gcn_events(self, payload):
+        """
+        Get GCN events from SkyPortal
+
+        Parameters
+        ----------
+        payload : dict
+            Dictionary of parameters to send with the request
+
+        Returns
+        -------
+        int
+            HTTP status code
+        dict
+            JSON response
+        """
+        return self.api("GET",f"/api/gcn_event",data=payload).get("events", [])
+
+    def download_localization(self, dateobs, localization_name):
+        """
+        Download localization as a FITS file from SkyPortal.
+
+        Returns
+        -------
+        int
+            HTTP status code
+        dict
+            JSON response
+        """
+        response = self.api(
+            "GET",
+            f"/api/localization/{dateobs}/name/{localization_name}/download",
+            return_response=True
+        )
+        if response.status_code != 200:
+            raise ValueError(f"Error fetching localization: {response.text}")
+        return io.BytesIO(response.content) # return a BytesIO object containing the FITS file
+
+    def get_objects(self, payload):
+        """
+        Get objects from SkyPortal
+
+        Parameters
+        ----------
+        payload : dict
+            Dictionary of parameters to send with the request
+
+        Returns
+        -------
+        int
+            HTTP status code
+        dict
+            JSON response
+        """
+        return self.api("GET",f"/api/candidates",data=payload).get("candidates", [])
