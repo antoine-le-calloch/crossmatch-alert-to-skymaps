@@ -53,6 +53,7 @@ def crossmatch_alert_to_skymaps():
                 if matching_localizations:
                     crossmatches.append({"obj": obj, "localizations": matching_localizations})
                     # TODO: Do something with the object, e.g., publish somewhere
+                    print(obj["id"], matching_localizations)
 
             if len(objs) > 0:
                 print(f"\n{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds")
