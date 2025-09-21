@@ -125,6 +125,4 @@ def get_valid_obj(skyportal, payload, snr_threshold, fallback):
                     break
     if len(objs) > 0:
         print(f"Found {len(results)} valid objects on {len(objs)} in {time.time() - start_time:.2f} seconds")
-    else:
-        print("No new objects found")
     return results

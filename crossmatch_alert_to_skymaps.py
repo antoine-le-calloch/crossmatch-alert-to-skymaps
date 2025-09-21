@@ -18,13 +18,12 @@ fallback_in_days = 2
 def crossmatch_alert_to_skymaps():
     skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
     latest_gcn_date_obs = datetime.utcnow() - timedelta(days=fallback_in_days)
-    latest_obj_refresh = datetime.utcnow() - timedelta(hours=3)
+    latest_obj_refresh = datetime.utcnow() - timedelta(hours=2)
     cumulative_probability = 0.95
     snr_threshold = 5.0
     skymaps = None
 
     while True:
-        print(f"\n{datetime.utcnow()}")
         # Check if new GCNs have been observed since the last observation
         new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
         if skymaps is None or new_latest_gcn_events: # If new GCNs, fetch again skymaps from the last 2 days
@@ -56,7 +55,7 @@ def crossmatch_alert_to_skymaps():
                     # TODO: Do something with the object, e.g., publish somewhere
 
             if len(objs) > 0:
-                print(f"Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds")
+                print(f"\n{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds")
         else:
             print("No skymaps available. Waiting...")
         time.sleep(20)
