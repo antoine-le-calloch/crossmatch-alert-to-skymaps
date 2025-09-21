@@ -5,8 +5,20 @@ from mocpy import MOC
 from astropy.io import fits
 
 
-def get_moc_from_fits(bytesIO_file, cumulative_probability):
-    with fits.open(bytesIO_file) as hdul:
+def get_moc_from_fits(bytes, cumulative_probability):
+    """Extract MOC from a FITS file containing a HEALPix localization map.
+    Parameters
+    ----------
+    bytes : io.BytesIO
+        A BytesIO object containing the FITS file data.
+    cumulative_probability : float
+        The cumulative probability threshold for the MOC.
+    Returns
+    -------
+    moc : MOC
+        The MOC corresponding to the cumulative_probability threshold.
+    """
+    with fits.open(bytes) as hdul:
         data = hdul[1].data
     uniq = data["UNIQ"]
     probdensity = data["PROBDENSITY"]
@@ -38,7 +50,7 @@ def get_skymaps(skyportal, dateobs, cumulative_probability):
     results : list of tuples
         A list of tuples, each containing a localization ID and its corresponding MOC.
     """
-    gcn_events = skyportal.get_gcn_events({"startDate": dateobs, "gcnTagKeep": "GW", "excludeNoticeContent": True})
+    gcn_events = skyportal.get_gcn_events(dateobs)
     if not gcn_events:
         return []
 

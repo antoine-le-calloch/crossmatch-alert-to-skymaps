@@ -17,6 +17,8 @@ skyportal_api_key = os.getenv("SKYPORTAL_API_KEY")
 allocation_id = os.getenv("ALLOCATION_ID")
 group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 
+fallback_in_days = 2
+
 def is_obj_in_localizations(ra, dec, localizations):
     """
     Check if an object is within any of the provided localizations.
@@ -32,7 +34,7 @@ def is_obj_in_localizations(ra, dec, localizations):
     Returns
     -------
     list
-        List of localization IDs that contain the object.
+        All localization IDs that contain the object.
     """
     matching_localizations = [
         loc_id
@@ -41,83 +43,87 @@ def is_obj_in_localizations(ra, dec, localizations):
     ]
     return matching_localizations
 
-def is_obj_valid(obj, snr_threshold, datetime_cutoff):
+def get_valid_obj(skyportal, payload, snr_threshold, fallback):
     """
-    Check if an object has its first detection passing the SNR threshold within the given datetime cutoff.
+    Retrieve objects from SkyPortal and filter them based on the first detection.
 
     Parameters
     ----------
-    obj : dict
-        Object dictionary containing a "photometry" key (list of dicts).
+    skyportal : SkyPortal
+        An instance of the SkyPortal API client.
+    payload : dict
+        The payload to use for the get_objects API call.
     snr_threshold : float
-        Minimum required signal-to-noise ratio.
-    datetime_cutoff : datetime
-        Invalidates objects with first detection before this datetime.
+        The signal-to-noise ratio threshold for the first detection.
+    fallback : int
+        The number of days to look back for the first detection.
 
     Returns
     -------
-    bool
-        True if the first valid detection is within cutoff, False otherwise.
+    list
+        All objects that meet the criteria.
+
     """
-    for phot in sorted(obj.get("photometry", []), key=lambda p: p.get("mjd")):
-        if phot["flux"] and phot["fluxerr"] and phot["flux"] / phot["fluxerr"] >= snr_threshold:
-            return phot["mjd"] >= Time(datetime_cutoff).mjd
-    return False
+    fallback_mjd = Time(datetime.utcnow() - timedelta(days=fallback)).mjd
+    start_time = time.time()
+    objs = skyportal.get_objects(payload)
+    results = []
+    for obj in objs:
+        # Keep the object if its first detection with SNR ≥ threshold occurs after the fallback date
+        for phot in sorted(obj.get("photometry", []), key=lambda p: p.get("mjd")):
+            if phot["flux"] and phot["fluxerr"] and phot["flux"] / phot["fluxerr"] >= snr_threshold:
+                if phot["mjd"] >= fallback_mjd:
+                    results.append(obj)
+                    break
+    print(f"Found {len(results)} valid objects on {len(objs)} in {time.time() - start_time:.2f} seconds")
+    return results
 
 def crossmatch_alert_to_skymaps():
-    # Start by checking GCNs and objects from the last 2 days
-    two_days_ago = datetime.utcnow() - timedelta(days=2)
-    latest_gcn_date_obs = two_days_ago
-    latest_obj_refresh = two_days_ago
+    skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
+    fallback_date = datetime.utcnow() - timedelta(days=fallback_in_days)
+    latest_gcn_date_obs = fallback_date
+    latest_obj_refresh = fallback_date
     cumulative_probability = 0.95
     snr_threshold = 5.0
     skymaps = None
-    skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
 
     while True:
-        # Check if new GCNs with tag "GW" have been observed since the last observation
-        new_latest_gcn_events = skyportal.get_gcn_events(
-            {"startDate": latest_gcn_date_obs + timedelta(seconds=1), "gcnTagKeep": "GW", "excludeNoticeContent": True}
-        )
+        # Check if new GCNs have been observed since the last observation
+        new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
         if skymaps is None or new_latest_gcn_events: # If new GCNs, fetch again skymaps from the last 2 days
             print(f"New GCNs found, fetching skymaps")
             start_time = time.time()
-            skymaps = get_skymaps(skyportal, datetime.utcnow() - timedelta(days=2), cumulative_probability)
+            skymaps = get_skymaps(skyportal, datetime.utcnow() - timedelta(days=fallback_in_days), cumulative_probability)
             print(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
 
             if new_latest_gcn_events:
                 latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
 
         # Retrieve objects created after last refresh time
-        payload = {
-            "startDate": latest_obj_refresh,
-            "includePhotometry": True,
-        }
-        if group_ids_to_listen:
-            payload["groupIDs"] = group_ids_to_listen
-        latest_obj_refresh=datetime.utcnow() # Update the refresh time before the query
-        start_time = time.time()
-        objs = skyportal.get_objects(payload)
-        if objs:
-            print(f"Fetching {len(objs)} objects from skymaps took {time.time() - start_time:.2f} seconds")
-        crossmatches = []
-        start_time = time.time()
-        invalid_objs_count = 0
-        for obj in objs:
-            if not is_obj_valid(obj, snr_threshold, datetime.utcnow() - timedelta(days=2)):
-                invalid_objs_count += 1
-                continue
+        if skymaps:
+            get_objects_payload = {
+                "startDate": latest_obj_refresh.isoformat(),
+                "includePhotometry": True,
+            }
+            if group_ids_to_listen:
+                get_objects_payload["groupIDs"] = group_ids_to_listen
 
-            if skymaps and is_obj_in_localizations(obj["ra"], obj["dec"], skymaps):
-                crossmatches.append(obj)
-                # TODO: Do something with the object, e.g., publish somewhere
+            latest_obj_refresh=datetime.utcnow() # Update the refresh time before the query
+            objs = get_valid_obj(skyportal, get_objects_payload, snr_threshold, fallback_in_days)
+            crossmatches = []
+            start_time = time.time()
+            for obj in objs:
+                matching_localizations = is_obj_in_localizations(obj["ra"], obj["dec"], skymaps)
+                if matching_localizations:
+                    crossmatches.append({"obj": obj, "localizations": matching_localizations})
+                    # TODO: Do something with the object, e.g., publish somewhere
 
-        if len(objs) > 0:
-            print(f"Crossmatching {len(objs)-invalid_objs_count} objects took {time.time() - start_time:.2f} seconds")
-            print(f"Found {invalid_objs_count} invalid objects and {len(crossmatches)} crossmatches with skymaps\n")
+            if len(objs) > 0:
+                print(f"Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds")
+            else:
+                print("No new objects to crossmatch. Waiting...")
         else:
-            print("No new objects to crossmatch. Waiting...")
-
+            print("No skymaps available. Waiting...")
         time.sleep(20)
 
 if __name__ == "__main__":
