@@ -81,6 +81,26 @@ class SkyPortal:
         )
         return response.status_code == 200
 
+    def fetch_all_pages(self, method, endpoint, payload, item_key):
+        """
+        Fetch all pages of a paginated API endpoint
+
+        Returns
+        -------
+        list
+            All items from all pages
+        """
+        items = []
+        payload["pageNumber"] = 1
+        payload["numPerPage"] = 1000,
+        while True:
+            results = self.api(method, endpoint, data=payload)
+            items += results[item_key]
+            if results["totalMatches"] <= len(items):
+                break
+            payload["pageNumber"] += 1
+        return items
+
     def api(self, method: str, endpoint: str, data=None, return_response=False):
         """
         Make an API request to SkyPortal
@@ -122,14 +142,19 @@ class SkyPortal:
 
         return body.get('data')
 
-    def get_gcn_events(self, payload):
+    def get_gcn_events(self, dateobs):
         """
-        Get GCN events from SkyPortal
+        Get GCN events from SkyPortal filtered by dateobs and
+        specific tags:
+        - GW (any size)
+        - NSBH (any size)
+        - Fermi < 1000 sq. deg.
+        - SVOM (any notice)
 
         Parameters
         ----------
-        payload : dict
-            Dictionary of parameters to send with the request
+        dateobs : datetime.datetime
+            Date of observation to filter GCN events from
 
         Returns
         -------
@@ -138,7 +163,27 @@ class SkyPortal:
         dict
             JSON response
         """
-        return self.api("GET",f"/api/gcn_event",data=payload).get("events", [])
+        payload = {
+            "startDate": dateobs,
+            "excludeNoticeContent": True,
+        }
+
+        # Get GCN events with GW or BNS or NSBH or SVOM tags and without BBH tag.
+        gcn_events = self.fetch_all_pages(
+            "GET",
+            "/api/gcn_event",
+            {**payload, "gcnTagKeep": "GW,BNS,NSBH,SVOM", "gcnTagRemove": "BBH"},
+            "events"
+        )
+
+        # Get GCN events with Fermi tag and localization < 1000 sq.deg.
+        gcn_events += self.fetch_all_pages(
+            "GET",
+            "/api/gcn_event",
+            {**payload,"gcnTagKeep": "Fermi","localizationTagKeep": "< 1000 sq.deg"},
+            "events"
+        )
+        return gcn_events
 
     def download_localization(self, dateobs, localization_name):
         """
@@ -176,4 +221,4 @@ class SkyPortal:
         dict
             JSON response
         """
-        return self.api("GET",f"/api/candidates",data=payload).get("candidates", [])
+        return self.fetch_all_pages("GET", "/api/candidates", payload, "candidates")
