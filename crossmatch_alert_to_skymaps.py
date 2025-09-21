@@ -24,6 +24,7 @@ def crossmatch_alert_to_skymaps():
     skymaps = None
 
     while True:
+        print(f"\n{datetime.utcnow()}")
         # Check if new GCNs have been observed since the last observation
         new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
         if skymaps is None or new_latest_gcn_events: # If new GCNs, fetch again skymaps from the last 2 days
@@ -58,7 +59,6 @@ def crossmatch_alert_to_skymaps():
                 print(f"Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds")
         else:
             print("No skymaps available. Waiting...")
-        print()
         time.sleep(20)
 
 if __name__ == "__main__":
