@@ -56,7 +56,7 @@ def crossmatch_alert_to_skymaps():
                     print(obj["id"], matching_localizations)
 
             if len(objs) > 0:
-                print(f"\n{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds")
+                print(f"{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds\n")
         else:
             print("No skymaps available. Waiting...")
         time.sleep(20)
