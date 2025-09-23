@@ -9,7 +9,7 @@ from astropy.io import fits
 
 
 def get_moc_from_fits(bytes, cumulative_probability):
-    """Extract MOC from a FITS file containing a HEALPix localization map.
+    """Extract MOC from a FITS file containing a HEALPix skymap map.
     Parameters
     ----------
     bytes : io.BytesIO
@@ -34,7 +34,7 @@ def get_moc_from_fits(bytes, cumulative_probability):
 
 
 def get_skymaps(skyportal, cumulative_probability, fallback):
-    """Get all skymaps from SkyPortal since a given date. For each localization,
+    """Get all skymaps from SkyPortal since a given date. For each skymap,
     compute the MOC corresponding to the cumulative_probability threshold.
 
     Parameters
@@ -50,7 +50,7 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
     Returns
     -------
     results : list of tuples
-        A list of tuples, each containing a localization ID and its corresponding MOC.
+        A list of tuples, each containing a skymap dateobs and its corresponding MOC.
     """
     gcn_events = skyportal.get_gcn_events(datetime.utcnow() - timedelta(days=fallback))
     if not gcn_events:
@@ -58,38 +58,38 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
 
     results = []
     for gcn_event in gcn_events:
-        if not gcn_event.get("localizations"):
+        if not gcn_event.get("skymaps"):
             continue
-        last_localization = gcn_event.get("localizations")[0]
-        bytesIO_file = skyportal.download_localization(last_localization["dateobs"], last_localization["localization_name"])
+        skymap = gcn_event.get("skymaps")[0] # Take the most recent skymap
+        bytesIO_file = skyportal.download_skymap(skymap["dateobs"], skymap["skymap_name"])
         moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
-        results.append((last_localization["id"], moc))
+        results.append((skymap["dateobs"], moc))
 
     return results
 
-def is_obj_in_localizations(ra, dec, localizations):
+def is_obj_in_skymaps(ra, dec, skymaps):
     """
-    Check if an object is within any of the provided localizations.
+    Check if an object is within any of the provided skymaps (MOCs).
     Parameters
     ----------
     ra : float
         Right Ascension of the object in degrees.
     dec : float
         Declination of the object in degrees.
-    localizations : list of tuples
-        List of tuples where each tuple contains a localization ID and its corresponding MOC.
+    skymaps : list of tuples
+        List of tuples where each tuple contains a skymap dateobs and its corresponding MOC.
 
     Returns
     -------
     list
-        All localization IDs that contain the object.
+        All skymaps dateobs that contain the object.
     """
-    matching_localizations = [
-        loc_id
-        for loc_id, moc in localizations
+    matching_skymaps = [
+        dateobs
+        for dateobs, moc in skymaps
         if moc.contains_lonlat(ra * u.deg, dec * u.deg)
     ]
-    return matching_localizations
+    return matching_skymaps
 
 def get_valid_obj(skyportal, payload, snr_threshold, fallback):
     """
@@ -123,6 +123,6 @@ def get_valid_obj(skyportal, payload, snr_threshold, fallback):
                 if phot["mjd"] >= fallback_mjd:
                     results.append(obj)
                     break
-    if len(objs) > 0:
+    if objs:
         print(f"Found {len(results)} valid objects on {len(objs)} in {time.time() - start_time:.2f} seconds")
     return results

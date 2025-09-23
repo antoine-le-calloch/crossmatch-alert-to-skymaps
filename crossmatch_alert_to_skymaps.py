@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from api import SkyPortal
-from utils import get_skymaps, get_valid_obj, is_obj_in_localizations
+from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps
 
 load_dotenv()
 
@@ -26,19 +26,26 @@ def crossmatch_alert_to_skymaps():
     while True:
         # Check if new GCNs have been observed since the last observation
         new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
-        if skymaps is None or new_latest_gcn_events: # If new GCNs, fetch again skymaps from the last 2 days
+
+        if new_latest_gcn_events: # If new GCNs, fetch again skymaps from the last fallback_in_days
             print(f"New GCNs found, fetching skymaps")
             start_time = time.time()
             skymaps = get_skymaps(skyportal, cumulative_probability, fallback_in_days)
             print(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
+            latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
 
-            if new_latest_gcn_events:
-                latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
+        elif skymaps: # If no new GCNs, check for expired localizations and remove them
+            for dateobs, moc in skymaps.copy():
+                if dateobs >= datetime.utcnow() - timedelta(days=fallback_in_days):
+                    break
+                else:
+                    print(f"Removed expired skymap {dateobs}")
+                    skymaps.remove((dateobs, moc))
 
         # Retrieve objects created after last refresh time
         if skymaps:
             get_objects_payload = {
-                "startDate": latest_obj_refresh.isoformat(),
+                "startDate": max(latest_obj_refresh, datetime.utcnow() - timedelta(days=fallback_in_days)).isoformat(),
                 "includePhotometry": True,
             }
             if group_ids_to_listen:
@@ -49,13 +56,12 @@ def crossmatch_alert_to_skymaps():
             crossmatches = []
             start_time = time.time()
             for obj in objs:
-                matching_localizations = is_obj_in_localizations(obj["ra"], obj["dec"], skymaps)
-                if matching_localizations:
-                    crossmatches.append({"obj": obj, "localizations": matching_localizations})
+                matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], skymaps)
+                if matching_skymaps:
+                    crossmatches.append({"obj": obj, "skymaps": matching_skymaps})
                     # TODO: Do something with the object, e.g., publish somewhere
-                    print(obj["id"], matching_localizations)
-
-            if len(objs) > 0:
+                    print(obj["id"], matching_skymaps)
+            if objs:
                 print(f"{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds\n")
         else:
             print("No skymaps available. Waiting...")
