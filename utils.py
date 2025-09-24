@@ -2,8 +2,6 @@ import time
 import numpy as np
 import astropy.units as u
 
-from datetime import datetime, timedelta
-from astropy.time import Time
 from mocpy import MOC
 from astropy.io import fits
 
