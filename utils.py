@@ -41,8 +41,8 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
     ----------
     skyportal : SkyPortal
         An instance of the SkyPortal API client.
-    fallback : int
-        The number of days to look back for GCN events.
+    fallback : datetime.datetime
+        The starting date and time to filter GCN events from.
     cumulative_probability : float
         The cumulative probability threshold for the MOC. Only tiles contributing
         to this cumulative probability will be included in the MOC.
@@ -52,16 +52,16 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
     results : list of tuples
         A list of tuples, each containing a skymap dateobs and its corresponding MOC.
     """
-    gcn_events = skyportal.get_gcn_events(datetime.utcnow() - timedelta(days=fallback))
+    gcn_events = skyportal.get_gcn_events(fallback)
     if not gcn_events:
         return []
 
     results = []
     for gcn_event in gcn_events:
-        if not gcn_event.get("skymaps"):
+        if not gcn_event.get("localizations"):
             continue
-        skymap = gcn_event.get("skymaps")[0] # Take the most recent skymap
-        bytesIO_file = skyportal.download_skymap(skymap["dateobs"], skymap["skymap_name"])
+        skymap = gcn_event.get("localizations")[0] # Take the most recent skymap
+        bytesIO_file = skyportal.download_localization(skymap["dateobs"], skymap["localization_name"])
         moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
         results.append((skymap["dateobs"], moc))
 
@@ -91,7 +91,7 @@ def is_obj_in_skymaps(ra, dec, skymaps):
     ]
     return matching_skymaps
 
-def get_valid_obj(skyportal, payload, snr_threshold, fallback):
+def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
     """
     Retrieve objects from SkyPortal and filter them based on the first detection.
 
@@ -103,8 +103,8 @@ def get_valid_obj(skyportal, payload, snr_threshold, fallback):
         The payload to use for the get_objects API call.
     snr_threshold : float
         The signal-to-noise ratio threshold for the first detection.
-    fallback : int
-        The number of days to look back for the first detection.
+    first_detection_fallback : int
+        First detection fallback in mjd.
 
     Returns
     -------
@@ -112,7 +112,6 @@ def get_valid_obj(skyportal, payload, snr_threshold, fallback):
         All objects that meet the criteria.
 
     """
-    fallback_mjd = Time(datetime.utcnow() - timedelta(days=fallback)).mjd
     start_time = time.time()
     objs = skyportal.get_objects(payload)
     results = []
@@ -120,9 +119,9 @@ def get_valid_obj(skyportal, payload, snr_threshold, fallback):
         # Keep the object if its first detection with SNR ≥ threshold occurs after the fallback date
         for phot in sorted(obj.get("photometry", []), key=lambda p: p.get("mjd")):
             if phot["flux"] and phot["fluxerr"] and phot["flux"] / phot["fluxerr"] >= snr_threshold:
-                if phot["mjd"] >= fallback_mjd:
+                if phot["mjd"] >= first_detection_fallback:
                     results.append(obj)
-                    break
+                break
     if objs:
         print(f"Found {len(results)} valid objects on {len(objs)} in {time.time() - start_time:.2f} seconds")
     return results
