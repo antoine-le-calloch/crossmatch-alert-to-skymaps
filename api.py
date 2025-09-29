@@ -81,7 +81,7 @@ class SkyPortal:
         )
         return response.status_code == 200
 
-    def fetch_all_pages(self, method, endpoint, payload, item_key):
+    def fetch_all_pages(self, endpoint, payload, item_key):
         """
         Fetch all pages of a paginated API endpoint
 
@@ -94,7 +94,7 @@ class SkyPortal:
         payload["pageNumber"] = 1
         payload["numPerPage"] = 1000,
         while True:
-            results = self.api(method, endpoint, data=payload)
+            results = self.api("GET", endpoint, data=payload)
             items += results[item_key]
             if results["totalMatches"] <= len(items):
                 break
@@ -170,7 +170,6 @@ class SkyPortal:
 
         # Get GCN events with GW or BNS or NSBH or SVOM tags and without BBH tag.
         gcn_events = self.fetch_all_pages(
-            "GET",
             "/api/gcn_event",
             {**payload, "gcnTagKeep": "GW,BNS,NSBH,SVOM", "gcnTagRemove": "BBH"},
             "events"
@@ -178,7 +177,6 @@ class SkyPortal:
 
         # Get GCN events with Fermi tag and localization < 1000 sq.deg.
         gcn_events += self.fetch_all_pages(
-            "GET",
             "/api/gcn_event",
             {**payload,"gcnTagKeep": "Fermi","localizationTagKeep": "< 1000 sq.deg"},
             "events"
@@ -221,4 +219,4 @@ class SkyPortal:
         dict
             JSON response
         """
-        return self.fetch_all_pages("GET", "/api/candidates", payload, "candidates")
+        return self.fetch_all_pages("/api/candidates", payload, "candidates")
