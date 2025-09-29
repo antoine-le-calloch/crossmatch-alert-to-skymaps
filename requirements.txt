@@ -3,3 +3,4 @@ mocpy
 requests
 dotenv
 numpy
+slack_sdk
