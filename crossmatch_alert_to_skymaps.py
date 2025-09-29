@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from api import SkyPortal
+from gcn_notices import send_to_gcn
 from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps
 from astropy.time import Time
 
@@ -80,8 +81,11 @@ def crossmatch_alert_to_skymaps():
                     crossmatches.append({"obj": obj, "skymaps": matching_skymaps})
                     # TODO: Do something with the object, e.g., publish somewhere
                     print(obj["id"], matching_skymaps)
+                    send_to_gcn(obj, matching_skymaps)
             if objs:
                 print(f"{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds\n")
+            else:
+                print(f"No new objects found. Waiting...")
         else:
             print("No skymaps available. Waiting...")
         time.sleep(20)
