@@ -39,4 +39,3 @@ def prepare_gcn_payload(obj, matching_skymaps):
 
 def send_to_gcn(obj, matching_skymaps):
     payload = prepare_gcn_payload(obj, matching_skymaps)
-    send_to_slack(obj, matching_skymaps)

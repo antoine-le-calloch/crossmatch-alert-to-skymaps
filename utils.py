@@ -80,10 +80,10 @@ def is_obj_in_skymaps(ra, dec, skymaps):
     Returns
     -------
     list
-        All skymaps dateobs that contain the object.
+        A list of tuples containing the dateobs and MOC of skymaps that contain the object.
     """
     matching_skymaps = [
-        dateobs
+        (dateobs, moc)
         for dateobs, moc in skymaps
         if moc.contains_lonlat(ra * u.deg, dec * u.deg)
     ]

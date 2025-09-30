@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from slack_sdk import WebClient
 from datetime import datetime
+from plot_skymaps import get_crossmatch_plot
 
 load_dotenv()
 
@@ -24,13 +25,12 @@ def get_channel_id(channel_name):
             return channel["id"]
     return None
 
+slack_channel_id = get_channel_id(slack_channel_name)
+if not slack_channel_id:
+    exit("No slack channel found.")
 
 def delete_all_bot_messages():
     """Delete all messages sent by the bot in the specified Slack channel."""
-    slack_channel_id = get_channel_id(slack_channel_name)
-    if not slack_channel_id:
-        exit("No slack channel found.")
-
     history = client.conversations_history(channel=slack_channel_id)
     for message in history["messages"]:
         if message.get("bot_id"):
@@ -44,8 +44,7 @@ def send_to_slack(obj, matching_skymaps):
             f"*New object in Skymaps localization:*\n"
             f"*Date:* {datetime.utcnow().isoformat()}\n"
             f"*Object:* <{skyportal_url}/source/{obj['id']}|{obj['id']}>\n"
-            f"*Crossmatches:* \n" +
-            "\n".join(f"<{skyportal_url}/gcn_events/{skymap}|{skymap}>" for skymap in matching_skymaps)
+            f"*Crossmatches:* \n"
     )
 
     client.chat_postMessage(
@@ -53,3 +52,11 @@ def send_to_slack(obj, matching_skymaps):
         text=slack_text,
         mrkdwn=True
     )
+
+    for date, moc in matching_skymaps:
+        client.files_upload_v2(
+            channel=slack_channel_id,
+            filename=f"{obj['id']}_{date}.png",
+            file=get_crossmatch_plot(obj, moc),
+            initial_comment=f"<{skyportal_url}/gcn_events/{date}|{date}>",
+        )

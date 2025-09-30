@@ -3,10 +3,11 @@ import time
 
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from astropy.time import Time
+from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps
 from api import SkyPortal
 from gcn_notices import send_to_gcn
-from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps
-from astropy.time import Time
+from slack import send_to_slack
 
 load_dotenv()
 
@@ -47,8 +48,7 @@ def crossmatch_alert_to_skymaps():
             print(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
             latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
 
-        # If no new GCNs, check for expired localizations and remove them
-        elif skymaps:
+        elif skymaps: # If no new GCNs, check for expired localizations and remove them
             gcn_fallback_iso = fallback(GCN, "iso")
             # Iterate in reverse to get older items first
             for dateobs, moc in reversed(skymaps.copy()):
@@ -80,8 +80,8 @@ def crossmatch_alert_to_skymaps():
                 if matching_skymaps:
                     crossmatches.append({"obj": obj, "skymaps": matching_skymaps})
                     # TODO: Do something with the object, e.g., publish somewhere
-                    print(obj["id"], matching_skymaps)
-                    send_to_gcn(obj, matching_skymaps)
+                    # send_to_gcn(obj, matching_skymaps)
+                    send_to_slack(obj, matching_skymaps)
             if objs:
                 print(f"{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds\n")
             else:
