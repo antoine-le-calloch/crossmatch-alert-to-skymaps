@@ -43,7 +43,7 @@ delete_all_bot_messages()
 def send_to_slack(obj, matching_skymaps):
     """Send a message to Slack about a new object in Skymaps localization."""
     slack_text = (
-            f"*New object in Skymaps localization:*\n"
+            f"*New object in Skymaps localization*\n"
             f"*Date:* {datetime.utcnow().isoformat()}\n"
             f"*Object:* <{skyportal_url}/source/{obj['id']}|{obj['id']}>\n"
             f"*Crossmatches:* \n"
