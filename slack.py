@@ -25,9 +25,6 @@ def get_channel_id(channel_name):
             return channel["id"]
     return None
 
-slack_channel_id = get_channel_id(slack_channel_name)
-if not slack_channel_id:
-    exit("No slack channel found.")
 
 def delete_all_bot_messages():
     """Delete all messages sent by the bot in the specified Slack channel."""
@@ -37,9 +34,14 @@ def delete_all_bot_messages():
             client.chat_delete(channel=slack_channel_id, ts=message["ts"])
 
 
+slack_channel_id = get_channel_id(slack_channel_name)
+if not slack_channel_id:
+    exit("No slack channel found.")
+
+delete_all_bot_messages()
+
 def send_to_slack(obj, matching_skymaps):
     """Send a message to Slack about a new object in Skymaps localization."""
-    delete_all_bot_messages()
     slack_text = (
             f"*New object in Skymaps localization:*\n"
             f"*Date:* {datetime.utcnow().isoformat()}\n"
