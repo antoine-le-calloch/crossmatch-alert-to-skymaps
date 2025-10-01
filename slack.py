@@ -1,4 +1,5 @@
 import os
+import time
 
 from dotenv import load_dotenv
 from slack_sdk import WebClient
@@ -62,3 +63,4 @@ def send_to_slack(obj, matching_skymaps):
             file=get_crossmatch_plot(obj, moc),
             initial_comment=f"<{skyportal_url}/gcn_events/{date}|{date}>",
         )
+    time.sleep(1.5)  # To let the files upload properly
