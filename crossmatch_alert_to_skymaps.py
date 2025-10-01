@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from astropy.time import Time
-from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps
+from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj
 from api import SkyPortal
 from gcn_notices import send_to_gcn
 from slack import send_to_slack
@@ -76,7 +76,8 @@ def crossmatch_alert_to_skymaps():
             nb_crossmatches = 0
             start_time = time.time()
             for obj in objs:
-                matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], skymaps)
+                new_skymaps = get_new_skymaps_for_processed_obj(obj, skymaps)
+                matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
                 if matching_skymaps:
                     # Perform actions for each crossmatched object
                     send_to_gcn(obj, matching_skymaps)

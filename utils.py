@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import astropy.units as u
+from astropy.time import Time
 
 from mocpy import MOC
 from astropy.io import fits
@@ -114,12 +115,38 @@ def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
     objs = skyportal.get_objects(payload)
     results = []
     for obj in objs:
-        # Keep the object if its first detection with SNR ≥ threshold occurs after the fallback date
-        for phot in sorted(obj.get("photometry", []), key=lambda p: p.get("mjd")):
+        filtered_photometry = [] # Photometry that meets the SNR threshold
+        for phot in sorted(obj.get("photometry", []), key=lambda p: p.get("mjd"), reverse=True):
             if phot["flux"] and phot["fluxerr"] and phot["flux"] / phot["fluxerr"] >= snr_threshold:
-                if phot["mjd"] >= first_detection_fallback:
-                    results.append(obj)
-                break
+                filtered_photometry.append(phot)
+                if phot["mjd"] < first_detection_fallback:
+                    break
+        else: # If no detection before the fallback, keep the object
+            obj["filtered_photometry"] = filtered_photometry
+            results.append(obj)
     if objs:
         print(f"Found {len(results)} valid objects on {len(objs)} in {time.time() - start_time:.2f} seconds")
     return results
+
+
+def get_new_skymaps_for_processed_obj(obj, skymaps):
+    """
+    If the object has already been processed (i.e., has more than one filtered photometry point),
+    return only the skymaps that are newer than the last processed photometry point.
+    Parameters
+    ----------
+    obj : dict
+        The object containing photometry data.
+    skymaps : list of tuples
+        List of tuples where each tuple contains a skymap dateobs and its corresponding MOC
+
+    Returns
+    -------
+    list
+        A list of tuples containing the dateobs and MOC of skymaps that are newer than the last processed photometry point.
+
+    """
+    if len(obj.get("filtered_photometry")) < 2:
+        return skymaps
+
+    return [(dateobs, moc) for dateobs, moc in skymaps if Time(dateobs).mjd >= obj.get("photometry")[-2].get("mjd")]
