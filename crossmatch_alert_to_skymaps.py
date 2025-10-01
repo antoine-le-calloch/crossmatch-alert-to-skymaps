@@ -17,7 +17,7 @@ allocation_id = os.getenv("ALLOCATION_ID")
 group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 
 GCN = 48  # hours for GCN fallback
-ALERT = 2  # hours for alert fallback
+ALERT = 4  # hours for alert fallback
 FIRST_DETECTION = 48  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 
