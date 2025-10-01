@@ -1,5 +1,4 @@
 import os
-import time
 
 from dotenv import load_dotenv
 from slack_sdk import WebClient
@@ -50,17 +49,12 @@ def send_to_slack(obj, matching_skymaps):
             f"*Crossmatches:* \n"
     )
 
-    client.chat_postMessage(
-        channel=f"#{slack_channel_name}",
-        text=slack_text,
-        mrkdwn=True
-    )
-
     for date, moc in matching_skymaps:
         client.files_upload_v2(
             channel=slack_channel_id,
             filename=f"{obj['id']}_{date}.png",
             file=get_crossmatch_plot(obj, moc),
-            initial_comment=f"<{skyportal_url}/gcn_events/{date}|{date}>",
+            initial_comment=slack_text + f"<{skyportal_url}/gcn_events/{date}|{date}>",
+            mrkdwn=True
         )
-    time.sleep(1.5)  # To let the files upload properly
+        slack_text = ""  # Only include the header in the first message
