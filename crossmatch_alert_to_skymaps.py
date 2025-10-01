@@ -19,9 +19,10 @@ group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 GCN = 48  # hours for GCN fallback
 ALERT = 2  # hours for alert fallback
 FIRST_DETECTION = 48  # hours for first detection fallback
+SLEEP_TIME = 20 # seconds between each loop
 
-def fallback(hours=0, date_format=None):
-    date = datetime.utcnow() - timedelta(hours=hours)
+def fallback(hours=0, seconds=0, date_format=None):
+    date = datetime.utcnow() - timedelta(hours=hours, seconds=seconds)
     if date_format == "iso":
         return date.isoformat()
     if date_format == "mjd":
@@ -49,7 +50,7 @@ def crossmatch_alert_to_skymaps():
             latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
 
         elif skymaps: # If no new GCNs, check for expired localizations and remove them
-            gcn_fallback_iso = fallback(GCN, "iso")
+            gcn_fallback_iso = fallback(GCN, date_format="iso")
             # Iterate in reverse to get older items first
             for dateobs, moc in reversed(skymaps.copy()):
                 if dateobs >= gcn_fallback_iso:
@@ -71,12 +72,16 @@ def crossmatch_alert_to_skymaps():
                 skyportal,
                 get_objects_payload,
                 snr_threshold,
-                fallback(FIRST_DETECTION, "mjd")
+                fallback(FIRST_DETECTION, date_format="mjd")
             )
             nb_crossmatches = 0
             start_time = time.time()
             for obj in objs:
-                new_skymaps = get_new_skymaps_for_processed_obj(obj, skymaps)
+                new_skymaps = get_new_skymaps_for_processed_obj(
+                    obj,
+                    skymaps,
+                    fallback(seconds=SLEEP_TIME, date_format="mjd")
+                )
                 matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
                 if matching_skymaps:
                     # Perform actions for each crossmatched object
@@ -89,7 +94,7 @@ def crossmatch_alert_to_skymaps():
                 print(f"No new objects found. Waiting...")
         else:
             print("No skymaps available. Waiting...")
-        time.sleep(20)
+        time.sleep(SLEEP_TIME)
 
 if __name__ == "__main__":
     try:

@@ -129,9 +129,10 @@ def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
     return results
 
 
-def get_new_skymaps_for_processed_obj(obj, skymaps):
+def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd):
     """
-    If the object has already been processed (i.e., has more than one filtered photometry point),
+    If the object has already been processed
+    (i.e., has more than one filtered photometry point in less than sleeping time),
     return only the skymaps that are newer than the last processed photometry point.
     Parameters
     ----------
@@ -139,6 +140,8 @@ def get_new_skymaps_for_processed_obj(obj, skymaps):
         The object containing photometry data.
     skymaps : list of tuples
         List of tuples where each tuple contains a skymap dateobs and its corresponding MOC
+    last_processed_mjd : int
+        The last processed time in mjd.
 
     Returns
     -------
@@ -146,7 +149,16 @@ def get_new_skymaps_for_processed_obj(obj, skymaps):
         A list of tuples containing the dateobs and MOC of skymaps that are newer than the last processed photometry point.
 
     """
-    if len(obj.get("filtered_photometry")) < 2:
+    # Remove the last photometry point as it is the one that triggered the current processing
+    photometry = obj.get("filtered_photometry", [])[:-1]
+    if len(photometry) < 1:
         return skymaps
 
-    return [(dateobs, moc) for dateobs, moc in skymaps if Time(dateobs).mjd >= obj.get("photometry")[-2].get("mjd")]
+    for phot in reversed(photometry):
+        if phot["mjd"] < last_processed_mjd:
+            last_processed_alert_mjd = phot["mjd"]
+            break
+    else: # If no alert have been already processed, return all skymaps
+        return skymaps
+
+    return [(dateobs, moc) for dateobs, moc in skymaps if Time(dateobs).mjd >= last_processed_alert_mjd]
