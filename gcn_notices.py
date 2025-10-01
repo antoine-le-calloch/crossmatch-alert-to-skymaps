@@ -1,5 +1,3 @@
-from slack import send_to_slack
-
 def prepare_gcn_payload(obj, matching_skymaps):
     payload_photometry = []
     for p in obj.get("photometry", []):
