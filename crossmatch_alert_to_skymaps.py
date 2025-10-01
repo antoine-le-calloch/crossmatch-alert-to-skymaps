@@ -73,17 +73,17 @@ def crossmatch_alert_to_skymaps():
                 snr_threshold,
                 fallback(FIRST_DETECTION, "mjd")
             )
-            crossmatches = []
+            nb_crossmatches = 0
             start_time = time.time()
             for obj in objs:
                 matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], skymaps)
                 if matching_skymaps:
-                    crossmatches.append({"obj": obj, "skymaps": matching_skymaps})
-                    # TODO: Do something with the object, e.g., publish somewhere
-                    # send_to_gcn(obj, matching_skymaps)
+                    nb_crossmatches += 1
+                    # Perform actions for each crossmatched object
+                    send_to_gcn(obj, matching_skymaps)
                     send_to_slack(obj, matching_skymaps)
             if objs:
-                print(f"{datetime.utcnow()} Found {len(crossmatches)} crossmatches in {time.time() - start_time:.2f} seconds\n")
+                print(f"{datetime.utcnow()} Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds\n")
             else:
                 print(f"No new objects found. Waiting...")
         else:
