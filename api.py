@@ -168,10 +168,14 @@ class SkyPortal:
             "excludeNoticeContent": True,
         }
 
-        # Get GCN events with GW or BNS or NSBH or SVOM tags and without BBH tag.
+        # Get GCN events with GW, BNS, NSBH or SVOM and without BBH, MLy or Terrestrial tags.
         gcn_events = self.fetch_all_pages(
             "/api/gcn_event",
-            {**payload, "gcnTagKeep": "GW,BNS,NSBH,SVOM", "gcnTagRemove": "BBH"},
+            {
+                **payload,
+                "gcnTagKeep":"GW,BNS,NSBH,SVOM",
+                "gcnTagRemove": "BBH,MLy,Terrestrial"
+            },
             "events"
         )
 
