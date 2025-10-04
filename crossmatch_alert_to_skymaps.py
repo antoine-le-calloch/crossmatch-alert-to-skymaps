@@ -37,6 +37,7 @@ def crossmatch_alert_to_skymaps():
     cumulative_probability = 0.95
     snr_threshold = 5.0
     skymaps = None
+    new_latest_gcn_events = None
 
     while True:
         try:
