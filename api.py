@@ -1,4 +1,6 @@
 import io
+import time
+
 import requests
 
 class SkyPortal:
@@ -99,6 +101,7 @@ class SkyPortal:
             if results["totalMatches"] <= len(items):
                 break
             payload["pageNumber"] += 1
+            time.sleep(0.3)
         return items
 
     def api(self, method: str, endpoint: str, data=None, return_response=False):
