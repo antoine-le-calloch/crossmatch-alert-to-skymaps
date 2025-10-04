@@ -39,61 +39,71 @@ def crossmatch_alert_to_skymaps():
     skymaps = None
 
     while True:
-        # Check if new GCNs have been observed since the last observation
-        new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
+        try:
+            # Check if new GCNs have been observed since the last observation
+            new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
 
-        if new_latest_gcn_events: # If new GCNs, fetch again skymaps from the GCN fallback
-            print(f"New GCNs found, fetching skymaps")
-            start_time = time.time()
-            skymaps = get_skymaps(skyportal, cumulative_probability, fallback(GCN))
-            print(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
-            latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
+            if new_latest_gcn_events: # If new GCNs, fetch again skymaps from the GCN fallback
+                print(f"New GCNs found, fetching skymaps")
+                start_time = time.time()
+                skymaps = get_skymaps(skyportal, cumulative_probability, fallback(GCN))
+                print(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
+                latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
 
-        elif skymaps: # If no new GCNs, check for expired localizations and remove them
-            gcn_fallback_iso = fallback(GCN, date_format="iso")
-            # Iterate in reverse to get older items first
-            for dateobs, moc in reversed(skymaps.copy()):
-                if dateobs >= gcn_fallback_iso:
-                    break
-                print(f"Removed expired localization {dateobs}")
-                skymaps.remove((dateobs, moc))
+            elif skymaps: # If no new GCNs, check for expired localizations and remove them
+                gcn_fallback_iso = fallback(GCN, date_format="iso")
+                # Iterate in reverse to get older items first
+                for dateobs, moc in reversed(skymaps.copy()):
+                    if dateobs >= gcn_fallback_iso:
+                        break
+                    print(f"Removed expired localization {dateobs}")
+                    skymaps.remove((dateobs, moc))
 
-        # Retrieve objects created after last refresh time
-        if skymaps:
-            get_objects_payload = {
-                "startDate": max(latest_obj_refresh, fallback(ALERT)).isoformat(),
-                "includePhotometry": True,
-            }
-            if group_ids_to_listen:
-                get_objects_payload["groupIDs"] = group_ids_to_listen
+            # Retrieve objects created after last refresh time
+            if skymaps:
+                get_objects_payload = {
+                    "startDate": max(latest_obj_refresh, fallback(ALERT)).isoformat(),
+                    "includePhotometry": True,
+                }
+                if group_ids_to_listen:
+                    get_objects_payload["groupIDs"] = group_ids_to_listen
 
-            latest_obj_refresh=datetime.utcnow() # Update the refresh time before the query
-            objs = get_valid_obj(
-                skyportal,
-                get_objects_payload,
-                snr_threshold,
-                fallback(FIRST_DETECTION, date_format="mjd")
-            )
-            nb_crossmatches = 0
-            start_time = time.time()
-            for obj in objs:
-                new_skymaps = get_new_skymaps_for_processed_obj(
-                    obj,
-                    skymaps,
-                    fallback(seconds=SLEEP_TIME, date_format="mjd")
+                latest_obj_refresh=datetime.utcnow() # Update the refresh time before the query
+                objs = get_valid_obj(
+                    skyportal,
+                    get_objects_payload,
+                    snr_threshold,
+                    fallback(FIRST_DETECTION, date_format="mjd")
                 )
-                matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
-                if matching_skymaps:
-                    # Perform actions for each crossmatched object
-                    send_to_gcn(obj, matching_skymaps)
-                    send_to_slack(obj, matching_skymaps)
-                    nb_crossmatches += 1
-            if objs:
-                print(f"{datetime.utcnow()} Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds\n")
+                nb_crossmatches = 0
+                start_time = time.time()
+                for obj in objs:
+                    new_skymaps = get_new_skymaps_for_processed_obj(
+                        obj,
+                        skymaps,
+                        fallback(seconds=SLEEP_TIME, date_format="mjd")
+                    )
+                    matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
+                    if matching_skymaps:
+                        # Perform actions for each crossmatched object
+                        send_to_gcn(obj, matching_skymaps)
+                        send_to_slack(obj, matching_skymaps)
+                        nb_crossmatches += 1
+                if objs:
+                    print(f"{datetime.utcnow()} Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds\n")
+                else:
+                    print(f"No new objects found. Waiting...")
             else:
-                print(f"No new objects found. Waiting...")
-        else:
-            print("No skymaps available. Waiting...")
+                print("No skymaps available. Waiting...")
+        except Exception as e:
+            print(e)
+            print(f"Error occurred at {datetime.utcnow()}. Current state:")
+            print(f"  latest_gcn_date_obs: {latest_gcn_date_obs}")
+            print(f"  latest_obj_refresh: {latest_obj_refresh}")
+            print(f"  new_latest_gcn_events: {new_latest_gcn_events}")
+            print(f"  skymaps length: {len(skymaps or [])}")
+            print(f"  retrying in {SLEEP_TIME} seconds...\n")
+
         time.sleep(SLEEP_TIME)
 
 if __name__ == "__main__":
