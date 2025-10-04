@@ -38,6 +38,7 @@ def crossmatch_alert_to_skymaps():
     snr_threshold = 5.0
     skymaps = None
     new_latest_gcn_events = None
+    no_new_object_found = False
 
     while True:
         try:
@@ -92,10 +93,13 @@ def crossmatch_alert_to_skymaps():
                         nb_crossmatches += 1
                 if objs:
                     print(f"{datetime.utcnow()} Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds\n")
-                else:
+                    no_new_object_found = False
+                elif not no_new_object_found: # Only print once when no new objects are found
                     print(f"No new objects found. Waiting...")
+                    no_new_object_found = True
             else:
                 print("No skymaps available. Waiting...")
+
         except Exception as e:
             print(e)
             print(f"Error occurred at {datetime.utcnow()}. Current state:")
