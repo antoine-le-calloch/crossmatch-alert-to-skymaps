@@ -83,6 +83,17 @@ class SkyPortal:
         )
         return response.status_code == 200
 
+    def ping(self):
+        """
+        Ping the SkyPortal API to check if it's available
+
+        Returns
+        -------
+        bool
+            True if the API is available, False otherwise
+        """
+        return self._ping(self.base_url)
+
     def fetch_all_pages(self, endpoint, payload, item_key):
         """
         Fetch all pages of a paginated API endpoint
