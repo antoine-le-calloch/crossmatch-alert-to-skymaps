@@ -37,11 +37,15 @@ def crossmatch_alert_to_skymaps():
     cumulative_probability = 0.95
     snr_threshold = 5.0
     skymaps = None
-    new_latest_gcn_events = None
     no_new_object_found = False
 
     while True:
         try:
+            if not skyportal.ping():
+                print(f"{datetime.utcnow()} - SkyPortal instance is not available.")
+                time.sleep(SLEEP_TIME/2)
+                continue
+
             # Check if new GCNs have been observed since the last observation
             new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
 
@@ -101,13 +105,10 @@ def crossmatch_alert_to_skymaps():
                 print("No skymaps available. Waiting...")
 
         except Exception as e:
-            print(e)
-            print(f"Error occurred at {datetime.utcnow()}. Current state:")
-            print(f"  latest_gcn_date_obs: {latest_gcn_date_obs}")
-            print(f"  latest_obj_refresh: {latest_obj_refresh}")
-            print(f"  new_latest_gcn_events: {new_latest_gcn_events}")
-            print(f"  skymaps length: {len(skymaps or [])}")
-            print(f"  retrying in {SLEEP_TIME} seconds...\n")
+            if not skyportal.ping():
+                print(f"{datetime.utcnow()} - SkyPortal instance is not available.")
+            else:
+                print(f"{datetime.utcnow()} - {e}")
 
         time.sleep(SLEEP_TIME)
 
