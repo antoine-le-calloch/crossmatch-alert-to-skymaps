@@ -58,7 +58,7 @@ class SkyPortal:
         bool
             True if the API is available, False otherwise
         """
-        response = requests.get(f"{base_url}/api/sysinfo")
+        response = requests.get(f"{base_url}/api/sysinfo", timeout=3)
         return response.status_code == 200
     
     def _auth(self, base_url, headers):
@@ -79,7 +79,8 @@ class SkyPortal:
         """
         response = requests.get(
             f"{base_url}/api/config",
-            headers=headers
+            headers=headers,
+            timeout=5
         )
         return response.status_code == 200
 
@@ -93,27 +94,6 @@ class SkyPortal:
             True if the API is available, False otherwise
         """
         return self._ping(self.base_url)
-
-    def fetch_all_pages(self, endpoint, payload, item_key):
-        """
-        Fetch all pages of a paginated API endpoint
-
-        Returns
-        -------
-        list
-            All items from all pages
-        """
-        items = []
-        payload["pageNumber"] = 1
-        payload["numPerPage"] = 1000,
-        while True:
-            results = self.api("GET", endpoint, data=payload)
-            items += results[item_key]
-            if results["totalMatches"] <= len(items):
-                break
-            payload["pageNumber"] += 1
-            time.sleep(0.3)
-        return items
 
     def api(self, method: str, endpoint: str, data=None, return_response=False):
         """
@@ -139,7 +119,7 @@ class SkyPortal:
         """
         endpoint = f'{self.base_url}/{endpoint.strip("/")}'
         if method == 'GET':
-            response = requests.request(method, endpoint, params=data, headers=self.headers)
+            response = requests.request(method, endpoint, params=data, headers=self.headers, timeout=15)
         else:
             response = requests.request(method, endpoint, json=data, headers=self.headers)
 
@@ -155,6 +135,27 @@ class SkyPortal:
             raise ValueError(f'Error in API request: {body}')
 
         return body.get('data')
+
+    def fetch_all_pages(self, endpoint, payload, item_key):
+        """
+        Fetch all pages of a paginated API endpoint
+
+        Returns
+        -------
+        list
+            All items from all pages
+        """
+        items = []
+        payload["pageNumber"] = 1
+        payload["numPerPage"] = 1000,
+        while True:
+            results = self.api("GET", endpoint, data=payload)
+            items += results[item_key]
+            if results["totalMatches"] <= len(items):
+                break
+            payload["pageNumber"] += 1
+            time.sleep(0.3)
+        return items
 
     def get_gcn_events(self, dateobs):
         """
