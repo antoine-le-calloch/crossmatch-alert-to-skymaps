@@ -58,13 +58,7 @@ class SkyPortal:
         bool
             True if the API is available, False otherwise
         """
-        try:
-            response = requests.get(f"{base_url}/api/sysinfo", timeout=3)
-        except requests.exceptions.Timeout:
-            return False
-        except Exception as e:
-            print(e)
-            return False
+        response = requests.get(f"{base_url}/api/sysinfo", timeout=3)
         return response.status_code == 200
     
     def _auth(self, base_url, headers):

@@ -1,5 +1,6 @@
 import os
 import time
+import requests
 
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -41,10 +42,8 @@ def crossmatch_alert_to_skymaps():
 
     while True:
         try:
-            if not skyportal.ping():
-                print(f"{datetime.utcnow()} - SkyPortal instance is not available.")
-                time.sleep(SLEEP_TIME/2)
-                continue
+            # Check if SkyPortal is available
+            skyportal.ping()
 
             # Check if new GCNs have been observed since the last observation
             new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
@@ -104,11 +103,10 @@ def crossmatch_alert_to_skymaps():
             else:
                 print("No skymaps available. Waiting...")
 
+        except requests.exceptions.Timeout:
+            print(f"{datetime.utcnow()} - SkyPortal instance is not available.")
         except Exception as e:
-            if not skyportal.ping():
-                print(f"{datetime.utcnow()} - SkyPortal instance is not available.")
-            else:
-                print(f"{datetime.utcnow()} - {e}")
+            print(f"{datetime.utcnow()} - {e}")
 
         time.sleep(SLEEP_TIME)
 
