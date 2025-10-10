@@ -94,6 +94,7 @@ def crossmatch_alert_to_skymaps():
                         # Perform actions for each crossmatched object
                         send_to_gcn(obj, matching_skymaps)
                         send_to_slack(obj, matching_skymaps)
+                        gcn_notices.send_to_gcn(obj, matching_skymaps)
                         nb_crossmatches += 1
                 if objs:
                     print(f"{datetime.utcnow()} Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds\n")
