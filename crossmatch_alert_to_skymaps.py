@@ -1,13 +1,13 @@
 import os
 import time
 import requests
+import gcn_notices
 
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from astropy.time import Time
 from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj
 from api import SkyPortal
-from gcn_notices import send_to_gcn
 from slack import send_to_slack
 
 load_dotenv()
@@ -39,6 +39,7 @@ def crossmatch_alert_to_skymaps():
     snr_threshold = 5.0
     skymaps = None
     no_new_object_found = False
+    gcn_notices.setup_telescope_list(skyportal)
 
     while True:
         try:

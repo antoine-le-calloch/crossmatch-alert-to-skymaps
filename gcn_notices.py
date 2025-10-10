@@ -1,3 +1,12 @@
+telescope_list = {}
+
+def setup_telescope_list(skyportal):
+    global telescope_list
+    telescope_list = {
+        telescope["id"]: telescope["name"]
+        for telescope in skyportal.get_telescopes()
+    }
+
 def prepare_gcn_payload(obj, matching_skymaps):
     payload_photometry = []
     for p in obj.get("photometry", []):
@@ -5,7 +14,7 @@ def prepare_gcn_payload(obj, matching_skymaps):
             {
                 "target_name": p["obj_id"],
                 "date_obs": p["mjd"],
-                # "telescope": p.instrument.telescope.name,
+                "telescope": telescope_list[p["instrument"]["telescope_id"]],
                 "instrument": p["instrument"].get("name"),
                 "bandpass": p.get("filter"),
                 "flux": p.get("flux"),

@@ -239,3 +239,16 @@ class SkyPortal:
             JSON response
         """
         return self.fetch_all_pages("/api/candidates", payload, "candidates")
+
+    def get_telescopes(self):
+        """
+        Get telescopes from SkyPortal
+
+        Returns
+        -------
+        int
+            HTTP status code
+        dict
+            JSON response
+        """
+        return self.api("GET", "/api/telescope")
