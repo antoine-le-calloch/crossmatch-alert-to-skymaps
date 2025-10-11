@@ -240,9 +240,9 @@ class SkyPortal:
         """
         return self.fetch_all_pages("/api/candidates", payload, "candidates")
 
-    def get_telescopes(self):
+    def get_instruments(self):
         """
-        Get telescopes from SkyPortal
+        Get instruments from SkyPortal
 
         Returns
         -------
@@ -251,4 +251,4 @@ class SkyPortal:
         dict
             JSON response
         """
-        return self.api("GET", "/api/telescope")
+        return self.api("GET", "/api/instrument")
