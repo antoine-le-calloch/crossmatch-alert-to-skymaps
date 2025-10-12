@@ -35,8 +35,11 @@ def prepare_gcn_payload(obj, matching_skymaps):
                     "name": obj["id"],
                     "ra": obj["ra"],
                     "dec": obj["dec"],
-                    "classifications": obj.get("classifications", []),
-                    "gcn_crossmatch":  matching_skymaps,
+                    "classifications": [{
+                        "classification": classification["classification"],
+                        "probability": classification["probability"],
+                    } for classification in obj.get("classifications", [])],
+                    "gcn_crossmatch":  [alias for _, alias, _ in matching_skymaps],
                 }
             ],
             "photometry": payload_photometry,

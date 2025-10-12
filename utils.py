@@ -48,7 +48,7 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
     Returns
     -------
     results : list of tuples
-        A list of tuples, each containing a skymap dateobs and its corresponding MOC.
+        A list of tuples, each containing a skymap dateobs, its alias, and the corresponding MOC.
     """
     gcn_events = skyportal.get_gcn_events(fallback)
     if not gcn_events:
@@ -61,7 +61,8 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
         skymap = gcn_event.get("localizations")[0] # Take the most recent skymap
         bytesIO_file = skyportal.download_localization(skymap["dateobs"], skymap["localization_name"])
         moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
-        results.append((skymap["dateobs"], moc))
+        alias = gcn_event.get("aliases")[0].split('#')[1]
+        results.append((skymap["dateobs"], alias, moc))
 
     return results
 
@@ -75,16 +76,16 @@ def is_obj_in_skymaps(ra, dec, skymaps):
     dec : float
         Declination of the object in degrees.
     skymaps : list of tuples
-        List of tuples where each tuple contains a skymap dateobs and its corresponding MOC.
+        List of tuples where each tuple contains a skymap dateobs, its alias, and the corresponding MOC.
 
     Returns
     -------
     list
-        A list of tuples containing the dateobs and MOC of skymaps that contain the object.
+        A list of tuples containing the dateobs, alias, and the MOC of skymaps that contain the object.
     """
     matching_skymaps = [
-        (dateobs, moc)
-        for dateobs, moc in skymaps
+        (dateobs, alias, moc)
+        for dateobs, alias, moc in skymaps
         if moc.contains_lonlat(ra * u.deg, dec * u.deg)
     ]
     return matching_skymaps
@@ -135,7 +136,7 @@ def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd, is_first
     obj : dict
         The object containing photometry data.
     skymaps : list of tuples
-        List of tuples where each tuple contains a skymap dateobs and its corresponding MOC
+        List of tuples where each tuple contains a skymap dateobs, its alias, and the corresponding MOC.
     last_processed_mjd : int
         The last processed time in mjd.
     is_first_run : bool, optional
@@ -144,7 +145,7 @@ def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd, is_first
     Returns
     -------
     list
-        A list of tuples containing the dateobs and MOC of skymaps that are newer than the last processed photometry point.
+        A list of tuples containing the dateobs, alias, and MOC of skymaps that are newer than the last processed photometry point.
 
     """
     # Remove the first photometry point as it is the one that triggered the current processing
@@ -159,4 +160,4 @@ def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd, is_first
     else: # If no alert have been already processed, return all skymaps
         return skymaps
 
-    return [(dateobs, moc) for dateobs, moc in skymaps if Time(dateobs).mjd >= last_processed_alert_mjd]
+    return [(dateobs, alias, moc) for dateobs, alias, moc in skymaps if Time(dateobs).mjd >= last_processed_alert_mjd]

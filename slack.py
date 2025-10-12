@@ -50,7 +50,7 @@ def send_to_slack(obj, matching_skymaps):
             f"*Crossmatches:* \n"
     )
 
-    for date, moc in matching_skymaps:
+    for date, _, moc in matching_skymaps:
         client.files_upload_v2(
             channel=slack_channel_id,
             filename=f"{obj['id']}_{date}.png",

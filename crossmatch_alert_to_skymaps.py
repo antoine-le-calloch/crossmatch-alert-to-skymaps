@@ -62,7 +62,7 @@ def crossmatch_alert_to_skymaps():
             elif skymaps: # If no new GCNs, check for expired localizations and remove them
                 gcn_fallback_iso = fallback(GCN, date_format="iso")
                 # Iterate in reverse to get older items first
-                for dateobs, moc in reversed(skymaps.copy()):
+                for dateobs, alias, moc in reversed(skymaps.copy()):
                     if dateobs >= gcn_fallback_iso:
                         break
                     log(f"Removed expired localization {dateobs}")
@@ -99,9 +99,8 @@ def crossmatch_alert_to_skymaps():
                     matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
                     if matching_skymaps:
                         # Perform actions for each crossmatched object
-                        send_to_gcn(obj, matching_skymaps)
                         send_to_slack(obj, matching_skymaps)
-                        gcn_notices.send_to_gcn(obj, matching_skymaps)
+                        gcn_notices.send_to_gcn(obj, matching_skymaps, skyportal, snr_threshold)
                         nb_crossmatches += 1
                 if objs:
                     log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds")
