@@ -53,7 +53,6 @@ def crossmatch_alert_to_skymaps():
             new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
 
             if new_latest_gcn_events: # If new GCNs, fetch again skymaps from the GCN fallback
-                log(f"New GCNs found, fetching skymaps")
                 start_time = time.time()
                 skymaps = get_skymaps(skyportal, cumulative_probability, fallback(GCN))
                 log(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
@@ -104,7 +103,7 @@ def crossmatch_alert_to_skymaps():
                         gcn_notices.send_to_gcn(obj, matching_skymaps)
                         nb_crossmatches += 1
                 if objs:
-                    log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds\n")
+                    log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds")
                     no_new_object_found = False
                 elif not no_new_object_found: # Only log once when no new objects are found
                     log(f"No new objects found. Waiting...")
@@ -120,8 +119,4 @@ def crossmatch_alert_to_skymaps():
         time.sleep(SLEEP_TIME)
 
 if __name__ == "__main__":
-    try:
-        crossmatch_alert_to_skymaps()
-    except Exception as e:
-        log(f"Error in crossmatch_alert_to_skymaps service: {e}")
-        raise e
+    crossmatch_alert_to_skymaps()
