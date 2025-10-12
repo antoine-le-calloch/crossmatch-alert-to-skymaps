@@ -146,12 +146,12 @@ def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd):
         A list of tuples containing the dateobs and MOC of skymaps that are newer than the last processed photometry point.
 
     """
-    # Remove the last photometry point as it is the one that triggered the current processing
-    photometry = obj.get("filtered_photometry", [])[:-1]
+    # Remove the first photometry point as it is the one that triggered the current processing
+    photometry = obj.get("filtered_photometry", [])[1:]
     if len(photometry) < 1:
         return skymaps
 
-    for phot in reversed(photometry):
+    for phot in photometry:
         if phot["mjd"] < last_processed_mjd:
             last_processed_alert_mjd = phot["mjd"]
             break
