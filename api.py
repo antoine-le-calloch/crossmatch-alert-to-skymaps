@@ -9,10 +9,6 @@ class SkyPortal:
 
     Parameters
     ----------
-    protocol : str
-        Protocol to use (http or https)
-    host : str
-        Hostname of the SkyPortal instance
     port : int
         Port to use
     token : str
@@ -29,7 +25,7 @@ class SkyPortal:
     """
 
     def __init__(self, instance, token, port=443, validate=True):
-        # build the base URL from the protocol, host, and port
+        # build the base URL from the instance and port
         self.base_url = f'{instance}'
         if port not in ['None', '', 80, 443]:
             self.base_url += f':{port}'
@@ -112,10 +108,9 @@ class SkyPortal:
 
         Returns
         -------
-        int
-            HTTP status code
-        dict
-            JSON response
+        requests.Response or dict
+            If `return_response` is True, returns the raw `requests.Response` object.
+            Otherwise, returns the parsed JSON response as a dictionary.
         """
         endpoint = f'{self.base_url}/{endpoint.strip("/")}'
         if method == 'GET':
@@ -173,10 +168,8 @@ class SkyPortal:
 
         Returns
         -------
-        int
-            HTTP status code
-        dict
-            JSON response
+        list
+            GCN events
         """
         payload = {
             "startDate": dateobs,
@@ -208,10 +201,8 @@ class SkyPortal:
 
         Returns
         -------
-        int
-            HTTP status code
-        dict
-            JSON response
+        io.BytesIO
+            A BytesIO object containing the FITS file data.
         """
         response = self.api(
             "GET",
@@ -233,12 +224,30 @@ class SkyPortal:
 
         Returns
         -------
-        int
-            HTTP status code
-        dict
-            JSON response
+        list
+            Objects
         """
         return self.fetch_all_pages("/api/candidates", payload, "candidates")
+
+    def get_object_photometry(self, obj_id):
+        """
+        Get photometry for a specific object from SkyPortal
+
+        Parameters
+        ----------
+        obj_id : str
+            ID of the object to get photometry for
+
+        Returns
+        -------
+        list
+            Photometry data
+        """
+        payload = {
+            "individualOrSeries": "individual",
+            "deduplicatePhotometry": True
+        }
+        return self.api("GET", f"/api/sources/{obj_id}/photometry", payload)
 
     def get_instruments(self):
         """
@@ -246,9 +255,7 @@ class SkyPortal:
 
         Returns
         -------
-        int
-            HTTP status code
-        dict
-            JSON response
+        list
+            Instruments
         """
         return self.api("GET", "/api/instrument")
