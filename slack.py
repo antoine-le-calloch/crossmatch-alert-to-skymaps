@@ -1,3 +1,4 @@
+import json
 import os
 
 from dotenv import load_dotenv
@@ -44,7 +45,7 @@ def send_to_slack(obj, matching_skymaps):
     """Send a message to Slack about a new object in Skymaps localization."""
     slack_text = (
             f"*New object in Skymaps localization*\n"
-            f"*Date:* {datetime.utcnow().isoformat()}\n"
+            f"*Date:* {datetime.utcnow().replace(microsecond=0).isoformat()} UTC\n"
             f"*Object:* <{skyportal_url}/source/{obj['id']}|{obj['id']}>\n"
             f"*Crossmatches:* \n"
     )
