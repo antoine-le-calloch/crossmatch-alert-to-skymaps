@@ -125,7 +125,7 @@ def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
     return results
 
 
-def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd):
+def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd, is_first_run=False):
     """
     If the object has already been processed
     (i.e., has more than one filtered photometry point in less than sleeping time),
@@ -138,6 +138,8 @@ def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd):
         List of tuples where each tuple contains a skymap dateobs and its corresponding MOC
     last_processed_mjd : int
         The last processed time in mjd.
+    is_first_run : bool, optional
+        Whether this is the first run (default is False). If True, all skymaps are returned.
 
     Returns
     -------
@@ -147,7 +149,7 @@ def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd):
     """
     # Remove the first photometry point as it is the one that triggered the current processing
     photometry = obj.get("filtered_photometry", [])[1:]
-    if len(photometry) < 1:
+    if len(photometry) < 1 or is_first_run:
         return skymaps
 
     for phot in photometry:

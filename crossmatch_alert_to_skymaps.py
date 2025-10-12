@@ -43,6 +43,7 @@ def crossmatch_alert_to_skymaps():
     skymaps = None
     no_new_object_found = False
     gcn_notices.setup_telescope_list(skyportal)
+    is_first_run = True
 
     while True:
         try:
@@ -92,7 +93,8 @@ def crossmatch_alert_to_skymaps():
                     new_skymaps = get_new_skymaps_for_processed_obj(
                         obj,
                         skymaps,
-                        fallback(seconds=SLEEP_TIME, date_format="mjd")
+                        fallback(seconds=SLEEP_TIME,date_format="mjd"),
+                        is_first_run,
                     )
                     matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
                     if matching_skymaps:
@@ -115,6 +117,7 @@ def crossmatch_alert_to_skymaps():
         except Exception as e:
             log(e)
 
+        if is_first_run: is_first_run = False
         time.sleep(SLEEP_TIME)
 
 if __name__ == "__main__":
