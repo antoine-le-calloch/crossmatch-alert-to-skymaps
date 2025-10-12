@@ -6,7 +6,7 @@ import gcn_notices
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from astropy.time import Time
-from utils import get_skymaps, get_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj
+from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj
 from api import SkyPortal
 from slack import send_to_slack
 
@@ -18,7 +18,7 @@ allocation_id = os.getenv("ALLOCATION_ID")
 group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 
 GCN = 48  # hours for GCN fallback
-ALERT = 4  # hours for alert fallback
+ALERT = 14  # hours for alert fallback
 FIRST_DETECTION = 48  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 
@@ -72,21 +72,20 @@ def crossmatch_alert_to_skymaps():
             if skymaps:
                 get_objects_payload = {
                     "startDate": max(latest_obj_refresh, fallback(ALERT)).isoformat(),
-                    "includePhotometry": True,
                 }
                 if group_ids_to_listen:
                     get_objects_payload["groupIDs"] = group_ids_to_listen
 
                 latest_obj_refresh=datetime.utcnow() # Update the refresh time before the query
                 start_time = time.time()
-                objs = get_valid_obj(
+                objs, nb_objs_before_filtering = get_and_process_valid_obj(
                     skyportal,
                     get_objects_payload,
                     snr_threshold,
                     fallback(FIRST_DETECTION, date_format="mjd")
                 )
                 if objs:
-                    log(f"Found {len(objs)} new valid objects in {time.time() - start_time:.2f} seconds")
+                    log(f"Found {len(objs)} new valid objects on {nb_objs_before_filtering} in {time.time() - start_time:.2f} seconds")
                 nb_crossmatches = 0
                 start_time = time.time()
                 for obj in objs:
@@ -100,7 +99,7 @@ def crossmatch_alert_to_skymaps():
                     if matching_skymaps:
                         # Perform actions for each crossmatched object
                         send_to_slack(obj, matching_skymaps)
-                        gcn_notices.send_to_gcn(obj, matching_skymaps, skyportal, snr_threshold)
+                        gcn_notices.send_to_gcn(obj, matching_skymaps)
                         nb_crossmatches += 1
                 if objs:
                     log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds")
