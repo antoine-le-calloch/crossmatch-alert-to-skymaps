@@ -64,9 +64,8 @@ def crossmatch_alert_to_skymaps():
                 for dateobs, moc in reversed(skymaps.copy()):
                     if dateobs >= gcn_fallback_iso:
                         break
-                    print(f"Removed expired localization {dateobs}")
-                    skymaps.remove((dateobs, moc))
                     log(f"Removed expired localization {dateobs}")
+                    skymaps.remove((dateobs, alias, moc))
 
             # Retrieve objects created after last refresh time
             if skymaps:
