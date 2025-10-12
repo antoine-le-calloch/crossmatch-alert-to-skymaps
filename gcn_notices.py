@@ -1,32 +1,14 @@
 telescope_list = {}
+telescope_by_instrument_id = {}
 
 def setup_telescope_list(skyportal):
-    global telescope_list
-    telescope_list = {
-        telescope["id"]: telescope["name"]
-        for telescope in skyportal.get_telescopes()
+    global telescope_by_instrument_id
+    telescope_by_instrument_id = {
+        instrument["id"]: instrument["telescope"]["name"]
+        for instrument in skyportal.get_instruments()
     }
 
 def prepare_gcn_payload(obj, matching_skymaps):
-    payload_photometry = []
-    for p in obj.get("photometry", []):
-        payload_photometry.append(
-            {
-                "target_name": p["obj_id"],
-                "date_obs": p["mjd"],
-                "telescope": telescope_list[p["instrument"]["telescope_id"]],
-                "instrument": p["instrument"].get("name"),
-                "bandpass": p.get("filter"),
-                "flux": p.get("flux"),
-                "flux_error": p.get("fluxerr"),
-                # "brightness": p.get("mag"),
-                # "brightness_error": p["magerr"],
-                # "unit": "AB mag",
-                # "limiting_brightness": p.get("limiting_mag"),
-                # "limiting_brightness_unit": "AB mag",
-            }
-        )
-
     payload = {
         "title": f"SkyPortal report for {obj['id']}",
         "data": {
@@ -42,7 +24,18 @@ def prepare_gcn_payload(obj, matching_skymaps):
                     "gcn_crossmatch":  [alias for _, alias, _ in matching_skymaps],
                 }
             ],
-            "photometry": payload_photometry,
+            "photometry": [{
+                "target_name": p["obj_id"],
+                "date_obs": p["mjd"],
+                "telescope": telescope_by_instrument_id[p["instrument_id"]],
+                "instrument": p["instrument_name"],
+                "bandpass": p["filter"],
+                "brightness": p["mag"],
+                "brightness_error": p["magerr"],
+                "unit": "ab",
+                "limiting_brightness": p["limiting_mag"],
+                "limiting_brightness_unit": "ab",
+            } for p in obj["filtered_photometry"]]
         },
     }
     return payload
