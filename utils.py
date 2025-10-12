@@ -90,9 +90,10 @@ def is_obj_in_skymaps(ra, dec, skymaps):
     ]
     return matching_skymaps
 
-def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
+def get_and_process_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
     """
-    Retrieve objects from SkyPortal and filter them based on the first detection.
+    Retrieve objects and photometry from SkyPortal, filter them based on snr and the first detection.
+    And update each object with the filtered photometry.
 
     Parameters
     ----------
@@ -107,24 +108,32 @@ def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
 
     Returns
     -------
-    list
-        All objects that meet the criteria.
+    results : list
+        A list of objects with their filtered photometry.
+    total_objs : int
+        The total number of objects retrieved before filtering.
 
     """
     objs = skyportal.get_objects(payload)
     results = []
     for obj in objs:
-        filtered_photometry = [] # Photometry that meets the SNR threshold
-        for phot in sorted(obj.get("photometry", []), key=lambda p: p.get("mjd"), reverse=True):
-            if phot["flux"] and phot["fluxerr"] and phot["flux"] / phot["fluxerr"] >= snr_threshold:
+        photometry = skyportal.get_object_photometry(obj["id"])
+        last_non_detection = []
+        filtered_photometry = []
+        for phot in reversed(photometry):
+            if phot["snr"]: # If it's a detection
+                last_non_detection = [] # Reset last non-detection as we found a detection
                 filtered_photometry.append(phot)
-                if phot["mjd"] < first_detection_fallback:
+                if phot["snr"] >= snr_threshold and phot["mjd"] < first_detection_fallback:
                     break
+            elif not last_non_detection:
+                last_non_detection = [phot]
         else: # If no detection before the fallback, keep the object
-            obj["filtered_photometry"] = filtered_photometry
-            results.append(obj)
-    return results
-
+            results.append({
+                **obj,
+                "filtered_photometry": last_non_detection + list(reversed(filtered_photometry))
+            })
+    return results, len(objs)
 
 def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd, is_first_run=False):
     """
@@ -148,12 +157,12 @@ def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd, is_first
         A list of tuples containing the dateobs, alias, and MOC of skymaps that are newer than the last processed photometry point.
 
     """
-    # Remove the first photometry point as it is the one that triggered the current processing
-    photometry = obj.get("filtered_photometry", [])[1:]
+    # Remove the last photometry point as it is the one that triggered the current processing
+    photometry = obj.get("filtered_photometry", [])[:-1]
     if len(photometry) < 1 or is_first_run:
         return skymaps
 
-    for phot in photometry:
+    for phot in reversed(photometry):
         if phot["mjd"] < last_processed_mjd:
             last_processed_alert_mjd = phot["mjd"]
             break
