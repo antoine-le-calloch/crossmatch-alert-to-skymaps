@@ -1,4 +1,4 @@
-telescope_list = {}
+
 telescope_by_instrument_id = {}
 
 def setup_telescope_list(skyportal):
