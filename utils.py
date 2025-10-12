@@ -111,7 +111,6 @@ def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
         All objects that meet the criteria.
 
     """
-    start_time = time.time()
     objs = skyportal.get_objects(payload)
     results = []
     for obj in objs:
@@ -124,8 +123,6 @@ def get_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
         else: # If no detection before the fallback, keep the object
             obj["filtered_photometry"] = filtered_photometry
             results.append(obj)
-    if objs:
-        print(f"Found {len(results)} valid objects on {len(objs)} in {time.time() - start_time:.2f} seconds")
     return results
 
 
