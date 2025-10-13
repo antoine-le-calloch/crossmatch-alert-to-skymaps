@@ -1,6 +1,7 @@
 import os
 import time
 import requests
+import argparse
 
 from astropy.time import Time
 from datetime import datetime, timedelta
@@ -117,4 +118,16 @@ def crossmatch_alert_to_skymaps():
         time.sleep(SLEEP_TIME)
 
 if __name__ == "__main__":
+    # --- CLI arguments ---
+    parser = argparse.ArgumentParser(description="Crossmatch alerts with GCN skymaps.")
+    parser.add_argument(
+        "--alert-fallback",
+        "-af",
+        type=int,
+        default=12,
+        help="Alert fallback in hours (default: 12).",
+    )
+    args = parser.parse_args()
+    ALERT = args.alert_fallback or ALERT
+
     crossmatch_alert_to_skymaps()
