@@ -60,6 +60,6 @@ def send_to_slack(obj, matching_skymaps, gcn_payload):
         client.files_upload_v2(
             channel=slack_channel_id,
             filename=f"{obj['id']}_{alias}.png",
-            initial_comment=f"<{skyportal_url}/gcn_events/{date}|{alias}>",
+            initial_comment=f"*Alias:* <{skyportal_url}/gcn_events/{date}|{alias}>",
             file=get_crossmatch_plot(obj, moc),
         )
