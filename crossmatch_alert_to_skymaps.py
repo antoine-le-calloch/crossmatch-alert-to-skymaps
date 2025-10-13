@@ -97,7 +97,7 @@ def crossmatch_alert_to_skymaps():
                     matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
                     if matching_skymaps:
                         # Perform actions for each crossmatched object
-                        send_to_gcn(obj, matching_skymaps, also_to_slack=True)
+                        send_to_gcn(obj, matching_skymaps, notify_slack=True)
                         nb_crossmatches += 1
                 if objs:
                     log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds")

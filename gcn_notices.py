@@ -1,3 +1,4 @@
+from slack import send_to_slack
 
 telescope_by_instrument_id = {}
 
@@ -40,5 +41,7 @@ def prepare_gcn_payload(obj, matching_skymaps):
     }
     return payload
 
-def send_to_gcn(obj, matching_skymaps):
-    payload = prepare_gcn_payload(obj, matching_skymaps)
+def send_to_gcn(obj, matching_skymaps, notify_slack=True):
+    gcn_payload = prepare_gcn_payload(obj, matching_skymaps)
+    if notify_slack:
+        send_to_slack(obj, matching_skymaps, gcn_payload)
