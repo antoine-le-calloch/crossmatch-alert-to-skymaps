@@ -1,3 +1,4 @@
+import io
 import json
 import os
 
@@ -41,21 +42,24 @@ if not slack_channel_id:
 
 delete_all_bot_messages()
 
-def send_to_slack(obj, matching_skymaps):
-    """Send a message to Slack about a new object in Skymaps localization."""
-    slack_text = (
+def send_to_slack(obj, matching_skymaps, gcn_payload):
+    """Send a message to Slack with the object details and crossmatch plots."""
+    client.files_upload_v2(
+        channel=slack_channel_id,
+        initial_comment=(
             f"*New object in Skymaps localization*\n"
             f"*Date:* {datetime.utcnow().replace(microsecond=0).isoformat()} UTC\n"
             f"*Object:* <{skyportal_url}/source/{obj['id']}|{obj['id']}>\n"
-            f"*Crossmatches:* \n"
+            f"*GCN notice payload:*"
+        ),
+        title= f"gcn_notice_payload_{obj['id']}_{'_'.join([alias for _, alias, _ in matching_skymaps])}.json",
+        file= io.BytesIO(json.dumps(gcn_payload, indent=2, ensure_ascii=False).encode("utf-8")),
     )
 
-    for date, _, moc in matching_skymaps:
+    for date, alias, moc in matching_skymaps:
         client.files_upload_v2(
             channel=slack_channel_id,
-            filename=f"{obj['id']}_{date}.png",
+            filename=f"{obj['id']}_{alias}.png",
+            initial_comment=f"<{skyportal_url}/gcn_events/{date}|{alias}>",
             file=get_crossmatch_plot(obj, moc),
-            initial_comment=slack_text + f"<{skyportal_url}/gcn_events/{date}|{date}>",
-            mrkdwn=True
         )
-        slack_text = ""  # Only include the header in the first message

@@ -1,14 +1,13 @@
 import os
 import time
 import requests
-import gcn_notices
 
+from astropy.time import Time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from astropy.time import Time
-from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj
 from api import SkyPortal
-from slack import send_to_slack
+from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj
+from gcn_notices import send_to_gcn, setup_telescope_list
 
 load_dotenv()
 
@@ -42,7 +41,7 @@ def crossmatch_alert_to_skymaps():
     snr_threshold = 5.0
     skymaps = None
     no_new_object_found = False
-    gcn_notices.setup_telescope_list(skyportal)
+    setup_telescope_list(skyportal)
     is_first_run = True
 
     while True:
@@ -98,8 +97,7 @@ def crossmatch_alert_to_skymaps():
                     matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
                     if matching_skymaps:
                         # Perform actions for each crossmatched object
-                        send_to_slack(obj, matching_skymaps)
-                        gcn_notices.send_to_gcn(obj, matching_skymaps)
+                        send_to_gcn(obj, matching_skymaps, also_to_slack=True)
                         nb_crossmatches += 1
                 if objs:
                     log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds")
