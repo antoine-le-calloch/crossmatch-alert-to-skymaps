@@ -1,7 +1,25 @@
+import functools
 import io
 import time
 
 import requests
+
+def handle_timeout(method):
+    """
+    Decorator to handle requests timeouts and raise a TimeoutError with a custom message.
+    """
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return method(self, *args, **kwargs)
+        except requests.exceptions.Timeout:
+            red = "\033[31m"
+            yellow = "\033[33m"
+            endc = "\033[0m"
+            raise TimeoutError(
+                f"{red}Timeout error{endc} - SkyPortal API not responding to {yellow}{method.__name__}{endc} request"
+            )
+    return wrapper
 
 class SkyPortal:
     """
@@ -34,39 +52,29 @@ class SkyPortal:
 
         # ping it to make sure it's up, if validate is True
         if validate:
-            if not self._ping(self.base_url):
+            if not self.ping():
                 raise ValueError('SkyPortal API not available')
             
-            if not self._auth(self.base_url, self.headers):
+            if not self.auth():
                 raise ValueError('SkyPortal API authentication failed. Token may be invalid.')
-            
-    def _ping(self, base_url):
+
+    @handle_timeout
+    def ping(self):
         """
         Check if the SkyPortal API is available
-        
-        Parameters
-        ----------
-        base_url : str
-            Base URL of the SkyPortal instance
-            
+
         Returns
         -------
         bool
             True if the API is available, False otherwise
         """
-        response = requests.get(f"{base_url}/api/sysinfo", timeout=3)
+        response = requests.get(f"{self.base_url}/api/sysinfo", timeout=3)
         return response.status_code == 200
-    
-    def _auth(self, base_url, headers):
+
+    @handle_timeout
+    def auth(self):
         """
         Check if the SkyPortal Token provided is valid
-
-        Parameters
-        ----------
-        base_url : str
-            Base URL of the SkyPortal instance
-        headers : dict
-            Authorization headers to use
 
         Returns
         -------
@@ -74,22 +82,11 @@ class SkyPortal:
             True if the token is valid, False otherwise
         """
         response = requests.get(
-            f"{base_url}/api/config",
-            headers=headers,
+            f"{self.base_url}/api/config",
+            headers=self.headers,
             timeout=5
         )
         return response.status_code == 200
-
-    def ping(self):
-        """
-        Ping the SkyPortal API to check if it's available
-
-        Returns
-        -------
-        bool
-            True if the API is available, False otherwise
-        """
-        return self._ping(self.base_url)
 
     def api(self, method: str, endpoint: str, data=None, return_response=False):
         """
@@ -152,6 +149,7 @@ class SkyPortal:
             time.sleep(0.3)
         return items
 
+    @handle_timeout
     def get_gcn_events(self, dateobs):
         """
         Get GCN events from SkyPortal filtered by dateobs and
@@ -195,6 +193,7 @@ class SkyPortal:
         )
         return gcn_events
 
+    @handle_timeout
     def download_localization(self, dateobs, localization_name):
         """
         Download localization as a FITS file from SkyPortal.
@@ -213,6 +212,7 @@ class SkyPortal:
             raise ValueError(f"Error fetching localization: {response.text}")
         return io.BytesIO(response.content) # return a BytesIO object containing the FITS file
 
+    @handle_timeout
     def get_objects(self, payload):
         """
         Get objects from SkyPortal
@@ -229,6 +229,7 @@ class SkyPortal:
         """
         return self.fetch_all_pages("/api/candidates", payload, "candidates")
 
+    @handle_timeout
     def get_object_photometry(self, obj_id):
         """
         Get photometry for a specific object from SkyPortal
@@ -249,6 +250,7 @@ class SkyPortal:
         }
         return self.api("GET", f"/api/sources/{obj_id}/photometry", payload)
 
+    @handle_timeout
     def get_instruments(self):
         """
         Get instruments from SkyPortal

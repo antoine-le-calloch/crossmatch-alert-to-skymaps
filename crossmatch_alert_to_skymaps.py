@@ -1,6 +1,5 @@
 import os
 import time
-import requests
 import argparse
 
 from astropy.time import Time
@@ -109,8 +108,6 @@ def crossmatch_alert_to_skymaps():
             else:
                 log("No skymaps available. Waiting...")
 
-        except requests.exceptions.Timeout:
-            log(f"SkyPortal instance is not available.")
         except Exception as e:
             log(e)
 
