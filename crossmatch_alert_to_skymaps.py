@@ -125,15 +125,14 @@ if __name__ == "__main__":
         help="Alert fallback in hours (default: 12).",
     )
     parser.add_argument(
-        "--clean-slack",
-        "-cs",
-        type=bool,
-        default=True,
-        help="Clean all previous bot messages in Slack channel (default: True).",
+        "--keep-slack",
+        "-ks",
+        action="store_true",
+        help="Keep existing Slack messages.",
     )
     args = parser.parse_args()
     ALERT = args.alert_fallback or ALERT
-    if args.clean_slack:
+    if not args.keep_slack:
         from slack import delete_all_bot_messages
         delete_all_bot_messages()
 
