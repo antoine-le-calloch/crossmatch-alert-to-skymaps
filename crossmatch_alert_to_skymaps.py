@@ -35,13 +35,13 @@ def fallback(hours=0, seconds=0, date_format=None):
 
 def crossmatch_alert_to_skymaps():
     skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
+    setup_telescope_list(skyportal)
     latest_gcn_date_obs = fallback(GCN)
     latest_obj_refresh = fallback(ALERT)
     cumulative_probability = 0.95
     snr_threshold = 5.0
     skymaps = None
     no_new_object_found = False
-    setup_telescope_list(skyportal)
     is_first_run = True
 
     while True:
@@ -124,7 +124,17 @@ if __name__ == "__main__":
         default=12,
         help="Alert fallback in hours (default: 12).",
     )
+    parser.add_argument(
+        "--clean-slack",
+        "-cs",
+        type=bool,
+        default=True,
+        help="Clean all previous bot messages in Slack channel (default: True).",
+    )
     args = parser.parse_args()
     ALERT = args.alert_fallback or ALERT
+    if args.clean_slack:
+        from slack import delete_all_bot_messages
+        delete_all_bot_messages()
 
     crossmatch_alert_to_skymaps()
