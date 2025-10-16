@@ -1,10 +1,13 @@
 import numpy as np
 import astropy.units as u
-from astropy.time import Time
 
+from datetime import datetime
+from astropy.time import Time
 from mocpy import MOC
 from astropy.io import fits
 
+def log(message):
+    print(f"{datetime.utcnow()} - {message}")
 
 def get_moc_from_fits(bytes, cumulative_probability):
     """Extract MOC from a FITS file containing a HEALPix skymap map.

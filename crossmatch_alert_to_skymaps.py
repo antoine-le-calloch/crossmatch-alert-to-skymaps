@@ -6,7 +6,7 @@ from astropy.time import Time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from api import SkyPortal
-from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj
+from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj, log
 from gcn_notices import send_to_gcn, setup_telescope_list
 
 load_dotenv()
@@ -20,9 +20,6 @@ GCN = 48  # hours for GCN fallback
 ALERT = 12  # hours for alert fallback
 FIRST_DETECTION = 48  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
-
-def log(message):
-    print(f"{datetime.utcnow()} - {message}")
 
 def fallback(hours=0, seconds=0, date_format=None):
     date = datetime.utcnow() - timedelta(hours=hours, seconds=seconds)
