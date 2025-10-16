@@ -5,6 +5,8 @@ import requests
 
 from utils import log
 
+SLOW_RESPONSE_THRESHOLD = 5  # seconds
+
 def handle_timeout(method):
     """
     Decorator to handle requests timeouts and log slow responses.
@@ -27,7 +29,7 @@ def handle_timeout(method):
             result = method(self, *args, **kwargs)
 
             latency = time.time() - start
-            if latency > 5:
+            if latency > SLOW_RESPONSE_THRESHOLD:
                 log(f"{yellow}Warning - SkyPortal API is responding slowly to {get_request_type(method.__name__, args)} requests: {latency:.2f} seconds{endc}")
 
             return result
