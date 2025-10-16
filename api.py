@@ -1,21 +1,37 @@
 import functools
 import io
 import time
-
 import requests
+
+from utils import log
 
 def handle_timeout(method):
     """
-    Decorator to handle requests timeouts and raise a TimeoutError with a custom message.
+    Decorator to handle requests timeouts and log slow responses.
+    If a request takes longer than 5 seconds, log a warning.
+    If a request times out, raise a TimeoutError with a custom message.
     """
+    red = "\033[31m"
+    yellow = "\033[33m"
+    endc = "\033[0m"
+    def get_request_type(method_name, args):
+        """Return the method name or endpoint being called if method is 'api'"""
+        if method_name == "api" and len(args) > 1:
+            return args[1] # endpoint
+        return method_name
+
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         try:
-            return method(self, *args, **kwargs)
+            start = time.time()
+            result = method(self, *args, **kwargs)
+
+            latency = time.time() - start
+            if latency > 5:
+                log(f"{yellow}Warning - SkyPortal API is responding slowly to {get_request_type(method.__name__, args)} requests: {latency:.2f} seconds{endc}")
+
+            return result
         except requests.exceptions.Timeout:
-            red = "\033[31m"
-            yellow = "\033[33m"
-            endc = "\033[0m"
             raise TimeoutError(
                 f"{red}Timeout error{endc} - SkyPortal API not responding to {yellow}{method.__name__}{endc} request"
             )
@@ -70,7 +86,7 @@ class SkyPortal:
         bool
             True if the API is available, False otherwise
         """
-        response = requests.get(f"{self.base_url}/api/sysinfo", timeout=3)
+        response = requests.get(f"{self.base_url}/api/sysinfo", timeout=40)
         return response.status_code == 200
 
     @handle_timeout
@@ -86,10 +102,11 @@ class SkyPortal:
         response = requests.get(
             f"{self.base_url}/api/config",
             headers=self.headers,
-            timeout=5
+            timeout=40
         )
         return response.status_code == 200
 
+    @handle_timeout
     def api(self, method: str, endpoint: str, data=None, return_response=False):
         """
         Make an API request to SkyPortal
@@ -113,7 +130,7 @@ class SkyPortal:
         """
         endpoint = f'{self.base_url}/{endpoint.strip("/")}'
         if method == 'GET':
-            response = requests.request(method, endpoint, params=data, headers=self.headers, timeout=15)
+            response = requests.request(method, endpoint, params=data, headers=self.headers, timeout=40)
         else:
             response = requests.request(method, endpoint, json=data, headers=self.headers)
 
@@ -151,7 +168,6 @@ class SkyPortal:
             time.sleep(0.3)
         return items
 
-    @handle_timeout
     def get_gcn_events(self, dateobs):
         """
         Get GCN events from SkyPortal filtered by dateobs and
@@ -195,7 +211,6 @@ class SkyPortal:
         )
         return gcn_events
 
-    @handle_timeout
     def download_localization(self, dateobs, localization_name):
         """
         Download localization as a FITS file from SkyPortal.
@@ -214,7 +229,6 @@ class SkyPortal:
             raise ValueError(f"Error fetching localization: {response.text}")
         return io.BytesIO(response.content) # return a BytesIO object containing the FITS file
 
-    @handle_timeout
     def get_objects(self, payload):
         """
         Get objects from SkyPortal
@@ -231,7 +245,6 @@ class SkyPortal:
         """
         return self.fetch_all_pages("/api/candidates", payload, "candidates")
 
-    @handle_timeout
     def get_object_photometry(self, obj_id):
         """
         Get photometry for a specific object from SkyPortal
@@ -252,7 +265,6 @@ class SkyPortal:
         }
         return self.api("GET", f"/api/sources/{obj_id}/photometry", payload)
 
-    @handle_timeout
     def get_instruments(self):
         """
         Get instruments from SkyPortal
