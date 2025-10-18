@@ -38,7 +38,7 @@ def handle_timeout(method):
                 f"{red}Timeout error{endc} - SkyPortal API not responding to {yellow}{method.__name__}{endc} request"
             )
         except Exception as e:
-            raise f"Error in {method.__name__}: {e}"
+            raise Exception(f"Error in {method.__name__}: {e}")
     return wrapper
 
 class SkyPortal:
