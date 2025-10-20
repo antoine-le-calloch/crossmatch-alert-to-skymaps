@@ -35,10 +35,10 @@ def handle_timeout(method):
             return result
         except requests.exceptions.Timeout:
             raise TimeoutError(
-                f"{red}Timeout error{endc} - SkyPortal API not responding to {yellow}{method.__name__}{endc} request"
+                f"{red}Timeout error{endc} - SkyPortal API not responding to {yellow}{get_request_type(method.__name__, args)}{endc} request"
             )
         except Exception as e:
-            raise Exception(f"Error in {method.__name__}: {e}")
+            raise Exception(f"{red}Error in {get_request_type(method.__name__, args)}{endc} - {e}")
     return wrapper
 
 class SkyPortal:
@@ -142,10 +142,12 @@ class SkyPortal:
         try:
             body = response.json()
         except Exception:
-            raise ValueError(f'Error parsing JSON response: {response.text}')
+            if "server error" in response.text.lower():
+                raise ValueError('Server error.')
+            raise ValueError(f'{response.text}')
 
         if response.status_code != 200:
-            raise ValueError(f'Error in API request: {body}')
+            raise ValueError(f'{body.get("message", response.text)}')
 
         return body.get('data')
 
