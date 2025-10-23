@@ -144,10 +144,10 @@ class SkyPortal:
         except Exception:
             if "server error" in response.text.lower():
                 raise ValueError('Server error.')
-            raise ValueError(f'{response.text}')
+            raise ValueError(response.text)
 
         if response.status_code != 200:
-            raise ValueError(f'{body.get("message", response.text)}')
+            raise ValueError(body.get("message", response.text))
 
         return body.get('data')
 
