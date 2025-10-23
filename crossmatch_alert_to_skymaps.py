@@ -38,7 +38,10 @@ def crossmatch_alert_to_skymaps():
     cumulative_probability = 0.95
     snr_threshold = 5.0
     skymaps = None
-    no_new_object_found = False
+
+    # Flags to control logging
+    no_skymaps = False
+    no_new_object = False
     is_first_run = True
 
     while True:
@@ -98,12 +101,19 @@ def crossmatch_alert_to_skymaps():
                         nb_crossmatches += 1
                 if objs:
                     log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds")
-                    no_new_object_found = False
-                elif not no_new_object_found: # Only log once when no new objects are found
+                    no_new_object = False
+                elif not no_new_object: # Only log once when no new objects are found
                     log(f"No new objects found. Waiting...")
-                    no_new_object_found = True
-            else:
+                    log("               .")
+                    log("               .")
+                    log("               .")
+                    no_new_object = True
+            elif not no_skymaps:  # Only log once when no skymaps are available
                 log("No skymaps available. Waiting...")
+                log("               .")
+                log("               .")
+                log("               .")
+                no_skymaps = True
 
         except Exception as e:
             log(e)
