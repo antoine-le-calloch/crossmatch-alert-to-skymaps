@@ -7,7 +7,7 @@ from mocpy import MOC
 from astropy.io import fits
 
 def log(message):
-    print(f"{datetime.utcnow()} - {message}")
+    print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
 
 def get_moc_from_fits(bytes, cumulative_probability):
     """Extract MOC from a FITS file containing a HEALPix skymap map.
