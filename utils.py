@@ -64,7 +64,7 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
         skymap = gcn_event.get("localizations")[0] # Take the most recent skymap
         bytesIO_file = skyportal.download_localization(skymap["dateobs"], skymap["localization_name"])
         moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
-        alias = gcn_event.get("aliases")[0].split('#')[1]
+        alias = gcn_event.get("aliases")[0].split('#')[-1]
         results.append((skymap["dateobs"], alias, moc))
 
     return results
