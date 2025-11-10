@@ -1,6 +1,6 @@
 astropy
 mocpy
 requests
-dotenv
+python-dotenv
 numpy
 slack_sdk
