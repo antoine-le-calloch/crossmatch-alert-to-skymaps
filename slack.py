@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import time
 
 from dotenv import load_dotenv
 from slack_sdk import WebClient
@@ -38,6 +39,7 @@ def delete_all_bot_messages():
     for message in history["messages"]:
         if message.get("bot_id"):
             client.chat_delete(channel=slack_channel_id, ts=message["ts"])
+            time.sleep(1.3) # To avoid hitting rate limits
 
 
 def send_to_slack(obj, matching_skymaps, gcn_payload):
