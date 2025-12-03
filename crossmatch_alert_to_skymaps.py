@@ -128,7 +128,6 @@ if __name__ == "__main__":
         "--alert-fallback",
         "-af",
         type=int,
-        default=12,
         help="Alert fallback in hours (default: 12).",
     )
     parser.add_argument(
