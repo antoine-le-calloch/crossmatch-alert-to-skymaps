@@ -11,7 +11,7 @@ def setup_telescope_list(skyportal):
 
 def prepare_gcn_payload(obj, matching_skymaps):
     payload = {
-        "title": f"SkyPortal report for {obj['id']}",
+        "title": f"Optical alert {obj['id']}",
         "data": {
             "targets": [
                 {
