@@ -5,6 +5,7 @@ from datetime import datetime
 from astropy.time import Time
 from mocpy import MOC
 from astropy.io import fits
+from astropy_healpix import HEALPix
 
 def log(message):
     print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
@@ -24,13 +25,38 @@ def get_moc_from_fits(bytes, cumulative_probability):
     """
     with fits.open(bytes) as hdul:
         data = hdul[1].data
-    uniq = data["UNIQ"]
-    probdensity = data["PROBDENSITY"]
+        columns = [col.name for col in hdul[1].columns]
+        header = hdul[1].header
 
-    # let's convert the probability density into a probability
-    orders = (np.log2(uniq // 4)) // 2
-    area = 4 * np.pi / np.array([MOC.n_cells(int(order)) for order in orders]) * u.sr
-    prob = probdensity * area
+    if "UNIQ" in columns:
+        # Multi-order format
+        uniq = data["UNIQ"]
+        probdensity = data["PROBDENSITY"]
+        orders = (np.log2(uniq // 4)) // 2
+        area = 4 * np.pi / np.array([MOC.n_cells(int(order)) for order in orders]) * u.sr
+        prob = probdensity * area
+    else:
+        # Flat HEALPix format
+        prob_col = next(c for c in columns if c in ("PROB", "PROBABILITY", "PROBDENSITY"))
+        prob = np.ravel(data[prob_col])
+        npix = len(prob)
+        nside = int(np.sqrt(npix / 12))
+        order = int(np.log2(nside))
+
+        # Convert from RING to NESTED ordering if needed (UNIQ scheme uses NESTED)
+        ordering = header.get("ORDERING", "NESTED").upper()
+        if ordering == "RING":
+            ring_hp = HEALPix(nside=nside, order="ring")
+            nested_hp = HEALPix(nside=nside, order="nested")
+            lon, lat = ring_hp.healpix_to_lonlat(np.arange(npix))
+            nested_indices = nested_hp.lonlat_to_healpix(lon, lat)
+            reordered = np.empty(npix)
+            reordered[nested_indices] = prob
+            prob = reordered
+
+        indices = np.arange(npix)
+        uniq = 4 * (4 ** order) + indices
+
     return MOC.from_valued_healpix_cells(uniq, prob, 29, cumul_to=cumulative_probability)
 
 
@@ -64,7 +90,10 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
         skymap = gcn_event.get("localizations")[0] # Take the most recent skymap
         bytesIO_file = skyportal.download_localization(skymap["dateobs"], skymap["localization_name"])
         moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
-        alias = gcn_event.get("aliases")[0].split('#')[-1]
+        if gcn_event.get("aliases"):
+            alias = gcn_event.get("aliases")[0].split('#')[-1]
+        else:
+            alias = f"No aliases"
         results.append((skymap["dateobs"], alias, moc))
 
     return results

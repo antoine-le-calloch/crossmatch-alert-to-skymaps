@@ -210,7 +210,7 @@ class SkyPortal:
         # Get GCN events with Fermi tag and localization < 1000 sq.deg.
         gcn_events += self.fetch_all_pages(
             "/api/gcn_event",
-            {**payload,"gcnTagKeep": "Fermi","localizationTagKeep": "< 1000 sq.deg"},
+            {**payload,"gcnTagKeep": "Fermi","localizationTagKeep": "< 1000 sq. deg."},
             "events"
         )
         return gcn_events
