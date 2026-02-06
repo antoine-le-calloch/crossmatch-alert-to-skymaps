@@ -1,12 +1,13 @@
 import os
 import time
 import argparse
+import traceback
 
 from astropy.time import Time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from api import SkyPortal
-from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj, log
+from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj, log, RED, ENDC
 from gcn_notices import send_to_gcn, setup_telescope_list
 
 load_dotenv()
@@ -115,8 +116,9 @@ def crossmatch_alert_to_skymaps():
                 log("               .")
                 no_skymaps = True
 
-        except Exception as e:
-            log(e)
+        except Exception:
+            log(f"{RED}An error occurred:{ENDC}")
+            traceback.print_exc()
 
         if is_first_run: is_first_run = False
         time.sleep(SLEEP_TIME)

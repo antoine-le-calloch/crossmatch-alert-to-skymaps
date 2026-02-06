@@ -3,9 +3,12 @@ import io
 import time
 import requests
 
-from utils import log
+from utils import log, RED, YELLOW, ENDC
 
 SLOW_RESPONSE_THRESHOLD = 5  # seconds
+
+class APIError(Exception):
+    pass
 
 def handle_timeout(method):
     """
@@ -13,9 +16,6 @@ def handle_timeout(method):
     If a request takes longer than 5 seconds, log a warning.
     If a request times out, raise a TimeoutError with a custom message.
     """
-    red = "\033[31m"
-    yellow = "\033[33m"
-    endc = "\033[0m"
     def get_request_type(method_name, args):
         """Return the method name or endpoint being called if method is 'api'"""
         if method_name == "api" and len(args) > 1:
@@ -30,15 +30,13 @@ def handle_timeout(method):
 
             latency = time.time() - start
             if latency > SLOW_RESPONSE_THRESHOLD:
-                log(f"{yellow}Warning - SkyPortal API is responding slowly to {get_request_type(method.__name__, args)} requests: {latency:.2f} seconds{endc}")
+                log(f"{YELLOW}Warning - SkyPortal API is responding slowly to {get_request_type(method.__name__, args)} requests: {latency:.2f} seconds{ENDC}")
 
             return result
-        except requests.exceptions.Timeout:
-            raise TimeoutError(
-                f"{red}Timeout error{endc} - SkyPortal API not responding to {yellow}{get_request_type(method.__name__, args)}{endc} request"
-            )
-        except Exception as e:
-            raise Exception(f"{red}Error in {get_request_type(method.__name__, args)}{endc} - {e}")
+        except requests.exceptions.Timeout: # Catch timeout errors and log them with a custom message
+            log(f"{RED}Timeout error{ENDC} - SkyPortal API not responding to {YELLOW}{get_request_type(method.__name__, args)}{ENDC} request")
+        except APIError as e: # Catch API errors and log them with a custom message
+            log(f"{RED}Api error in {get_request_type(method.__name__, args)}{ENDC} - {e}")
     return wrapper
 
 class SkyPortal:
@@ -142,12 +140,10 @@ class SkyPortal:
         try:
             body = response.json()
         except Exception:
-            if "server error" in response.text.lower():
-                raise ValueError('Server error.')
-            raise ValueError(response.text)
+            raise APIError("Server error." if "server error" in response.text.lower() else response.text)
 
         if response.status_code != 200:
-            raise ValueError(body.get("message", response.text))
+            raise APIError(body.get("message", response.text))
 
         return body.get('data')
 

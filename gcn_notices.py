@@ -4,9 +4,12 @@ telescope_by_instrument_id = {}
 
 def setup_telescope_list(skyportal):
     global telescope_by_instrument_id
+    instruments = skyportal.get_instruments()
+    if not instruments:
+        raise ValueError("No instruments retrieved from SkyPortal.")
     telescope_by_instrument_id = {
         instrument["id"]: instrument["telescope"]["name"]
-        for instrument in skyportal.get_instruments()
+        for instrument in instruments
     }
 
 def prepare_gcn_payload(obj, matching_skymaps):
