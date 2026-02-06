@@ -91,7 +91,14 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
     for gcn_event in gcn_events:
         if not gcn_event.get("localizations"):
             continue
-        skymap = gcn_event.get("localizations")[0] # Take the most recent skymap
+        # Take the most recent localization with "< 1000 sq. deg." tag
+        skymap = next(
+            (loc for loc in gcn_event["localizations"]
+             if any(tag["text"] == "< 1000 sq. deg." for tag in loc.get("tags", []))),
+            None
+        )
+        if not skymap:
+            continue
         bytesIO_file = skyportal.download_localization(skymap["dateobs"], skymap["localization_name"])
         moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
         if gcn_event.get("aliases"):
