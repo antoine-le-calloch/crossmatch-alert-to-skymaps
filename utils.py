@@ -64,7 +64,7 @@ def get_moc_from_fits(bytes, cumulative_probability):
     return MOC.from_valued_healpix_cells(uniq, prob, 29, cumul_to=cumulative_probability)
 
 
-def get_skymaps(skyportal, cumulative_probability, fallback):
+def get_skymaps(skyportal, cumulative_probability, gcn_events):
     """Get all skymaps from SkyPortal since a given date. For each skymap,
     compute the MOC corresponding to the cumulative_probability threshold.
 
@@ -72,40 +72,27 @@ def get_skymaps(skyportal, cumulative_probability, fallback):
     ----------
     skyportal : SkyPortal
         An instance of the SkyPortal API client.
-    fallback : datetime.datetime
-        The starting date and time to filter GCN events from.
+    gcn_events : list of dict
+        A list of GCN event filtered and populated with the most recent localization > 1000 sq. deg.
     cumulative_probability : float
         The cumulative probability threshold for the MOC. Only tiles contributing
         to this cumulative probability will be included in the MOC.
 
     Returns
     -------
-    results : list of tuples
-        A list of tuples, each containing a skymap dateobs, its alias, and the corresponding MOC.
+    results : dict
+        A dictionary where keys are GCN event IDs and values are tuples of (skymap dateobs, alias, MOC).
     """
-    gcn_events = skyportal.get_gcn_events(fallback)
-    if not gcn_events:
-        return []
-
-    results = []
+    results = {}
     for gcn_event in gcn_events:
-        if not gcn_event.get("localizations"):
-            continue
-        # Take the most recent localization with "< 1000 sq. deg." tag
-        skymap = next(
-            (loc for loc in gcn_event["localizations"]
-             if any(tag["text"] == "< 1000 sq. deg." for tag in loc.get("tags", []))),
-            None
-        )
-        if not skymap:
-            continue
+        skymap = gcn_event["localization"]
         bytesIO_file = skyportal.download_localization(skymap["dateobs"], skymap["localization_name"])
         moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
         if gcn_event.get("aliases"):
             alias = gcn_event.get("aliases")[0].split('#')[-1]
         else:
             alias = f"No aliases"
-        results.append((skymap["dateobs"], alias, moc))
+        results[gcn_event["id"]] = (skymap["dateobs"], alias, moc)
 
     return results
 

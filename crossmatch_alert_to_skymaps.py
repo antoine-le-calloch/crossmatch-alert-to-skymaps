@@ -34,11 +34,10 @@ def fallback(hours=0, seconds=0, date_format=None):
 def crossmatch_alert_to_skymaps():
     skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
     setup_telescope_list(skyportal)
-    latest_gcn_date_obs = fallback(GCN)
     latest_obj_refresh = fallback(ALERT)
     cumulative_probability = 0.95
     snr_threshold = 5.0
-    skymaps = None
+    skymaps = {}
 
     # Flags to control logging
     no_skymaps = False
@@ -50,23 +49,36 @@ def crossmatch_alert_to_skymaps():
             # Check if SkyPortal is available
             skyportal.ping()
 
-            # Check if new GCNs have been observed since the last observation
-            new_latest_gcn_events = skyportal.get_gcn_events(latest_gcn_date_obs + timedelta(seconds=1))
+            # Check for new GCN events or new localizations for existing events with "< 1000 sq. deg." tag
+            new_gcn_events = []
+            for event in skyportal.get_gcn_events(fallback(GCN)):
+                event["localization"] = next(
+                    (loc for loc in event.get("localizations", [])
+                     if any(tag["text"] == "< 1000 sq. deg." for tag in loc.get("tags", []))),
+                    None
+                )
+                if event["localization"] is None:
+                    continue
+                elif event["id"] not in skymaps:
+                    new_gcn_events.append(event)
+                elif event["localization"]["dateobs"] > skymaps[event["id"]][0]:
+                    new_gcn_events.append(event)
 
-            if new_latest_gcn_events: # If new GCNs, fetch again skymaps from the GCN fallback
+            if new_gcn_events:
                 start_time = time.time()
-                skymaps = get_skymaps(skyportal, cumulative_probability, fallback(GCN))
+                # Get skymaps for new GCN events
+                # Returns [{event_id: (dateobs, alias, moc)}, ...]
+                new_skymaps = get_skymaps(skyportal, cumulative_probability, new_gcn_events)
+                for event_id, skymap_tuple in new_skymaps.items():
+                    skymaps[event_id] = skymap_tuple
                 log(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
-                latest_gcn_date_obs = datetime.fromisoformat(new_latest_gcn_events[0].get('dateobs'))
 
             elif skymaps: # If no new GCNs, check for expired localizations and remove them
                 gcn_fallback_iso = fallback(GCN, date_format="iso")
-                # Iterate in reverse to get older items first
-                for dateobs, alias, moc in reversed(skymaps.copy()):
-                    if dateobs >= gcn_fallback_iso:
-                        break
-                    log(f"Removed expired localization {dateobs}")
-                    skymaps.remove((dateobs, alias, moc))
+                expired = [event_id for event_id, (dateobs, alias, moc) in skymaps.items() if dateobs < gcn_fallback_iso]
+                for event_id in expired:
+                    log(f"Removed expired skymap {skymaps[event_id][0]}")
+                    del skymaps[event_id]
 
             # Retrieve objects created after last refresh time
             if skymaps:
@@ -89,13 +101,14 @@ def crossmatch_alert_to_skymaps():
                 nb_crossmatches = 0
                 start_time = time.time()
                 for obj in objs:
-                    new_skymaps = get_new_skymaps_for_processed_obj(
+                    skymaps_tuples = list(skymaps.values())
+                    new_skymaps_tuples = get_new_skymaps_for_processed_obj(
                         obj,
-                        skymaps,
+                        skymaps_tuples,
                         fallback(seconds=SLEEP_TIME,date_format="mjd"),
                         is_first_run,
                     )
-                    matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps)
+                    matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps_tuples)
                     if matching_skymaps:
                         # Perform actions for each crossmatched object
                         send_to_gcn(obj, matching_skymaps, notify_slack=True)
