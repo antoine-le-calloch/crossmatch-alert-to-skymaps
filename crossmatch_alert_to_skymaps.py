@@ -6,7 +6,7 @@ import traceback
 from astropy.time import Time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from api import SkyPortal
+from api import SkyPortal, APIError
 from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj, log, RED, ENDC
 from gcn_notices import send_to_gcn, setup_telescope_list
 
@@ -88,7 +88,7 @@ def crossmatch_alert_to_skymaps():
                 if group_ids_to_listen:
                     get_objects_payload["groupIDs"] = group_ids_to_listen
 
-                latest_obj_refresh=datetime.utcnow() # Update the refresh time before the query
+                refresh_time=datetime.utcnow()
                 start_time = time.time()
                 objs, nb_objs_before_filtering = get_and_process_valid_obj(
                     skyportal,
@@ -96,6 +96,7 @@ def crossmatch_alert_to_skymaps():
                     snr_threshold,
                     fallback(FIRST_DETECTION, date_format="mjd")
                 )
+                latest_obj_refresh = refresh_time # Update the refresh time after successful query
                 if objs:
                     log(f"Found {len(objs)} new valid objects on {nb_objs_before_filtering} in {time.time() - start_time:.2f} seconds")
                 nb_crossmatches = 0
@@ -129,6 +130,8 @@ def crossmatch_alert_to_skymaps():
                 log("               .")
                 no_skymaps = True
 
+        except APIError as e:
+            log(e)
         except Exception:
             log(f"{RED}An error occurred:{ENDC}")
             traceback.print_exc()

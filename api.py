@@ -33,10 +33,10 @@ def handle_timeout(method):
                 log(f"{YELLOW}Warning - SkyPortal API is responding slowly to {get_request_type(method.__name__, args)} requests: {latency:.2f} seconds{ENDC}")
 
             return result
-        except requests.exceptions.Timeout: # Catch timeout errors and log them with a custom message
-            log(f"{RED}Timeout error{ENDC} - SkyPortal API not responding to {YELLOW}{get_request_type(method.__name__, args)}{ENDC} request")
-        except APIError as e: # Catch API errors and log them with a custom message
-            log(f"{RED}Api error in {get_request_type(method.__name__, args)}{ENDC} - {e}")
+        except APIError as e:
+            raise APIError(f"{RED}Api error in {get_request_type(method.__name__, args)}{ENDC} - {e}")
+        except requests.exceptions.Timeout:
+            raise APIError(f"{RED}Timeout error{ENDC} - SkyPortal API not responding to {YELLOW}{get_request_type(method.__name__, args)}{ENDC} request")
     return wrapper
 
 class SkyPortal:
@@ -132,7 +132,7 @@ class SkyPortal:
         if method == 'GET':
             response = requests.request(method, endpoint, params=data, headers=self.headers, timeout=40)
         else:
-            response = requests.request(method, endpoint, json=data, headers=self.headers)
+            response = requests.request(method, endpoint, json=data, headers=self.headers, timeout=40)
 
         if return_response:
             return response
@@ -158,7 +158,7 @@ class SkyPortal:
         """
         items = []
         payload["pageNumber"] = 1
-        payload["numPerPage"] = 1000,
+        payload["numPerPage"] = 1000
         while True:
             results = self.api("GET", endpoint, data=payload)
             items += results[item_key]
