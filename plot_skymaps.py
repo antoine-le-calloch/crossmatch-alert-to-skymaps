@@ -13,7 +13,7 @@ def get_crossmatch_plot(obj, moc):
     Parameters
     ----------
     obj : dict
-        Object with {"id", "ra", "dec"} in degrees.
+        Object with {"objectId", "ra", "dec"} in degrees.
     moc : MOC
         The MOC object representing the skymap.
 
@@ -43,7 +43,7 @@ def get_crossmatch_plot(obj, moc):
     ax.grid()
     ax.coords[0].set_ticklabel_visible(False)
     ax.scatter(obj["ra"], obj["dec"], transform=ax.get_transform("world"),marker='*',
-               s=120, c="blue", edgecolor="black", label=obj["id"], zorder=2)
+               s=120, c="blue", edgecolor="black", label=obj["objectId"], zorder=2)
 
     bytes = io.BytesIO()
     plt.savefig(bytes, format="png", bbox_inches="tight")

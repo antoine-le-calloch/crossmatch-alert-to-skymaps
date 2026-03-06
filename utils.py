@@ -1,7 +1,9 @@
+import io
+import fastavro
 import numpy as np
 import astropy.units as u
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from astropy.time import Time
 from mocpy import MOC
 from astropy.io import fits
@@ -13,6 +15,16 @@ ENDC = "\033[0m"
 
 def log(message):
     print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
+
+def fallback(hours=0, seconds=0, date_format=None):
+    date = datetime.utcnow() - timedelta(hours=hours, seconds=seconds)
+    if date_format == "iso":
+        return date.isoformat()
+    if date_format == "mjd":
+        return Time(date).mjd
+    if date_format == "jd":
+        return Time(date).jd
+    return date
 
 def get_moc_from_fits(bytes, cumulative_probability):
     """Extract MOC from a FITS file containing a HEALPix skymap map.
@@ -120,83 +132,24 @@ def is_obj_in_skymaps(ra, dec, skymaps):
     ]
     return matching_skymaps
 
-def get_and_process_valid_obj(skyportal, payload, snr_threshold, first_detection_fallback):
+def read_avro(msg):
     """
-    Retrieve objects and photometry from SkyPortal, filter them based on snr and the first detection.
-    And update each object with the filtered photometry.
+    Reads an Avro record from a Kafka message.
 
-    Parameters
-    ----------
-    skyportal : SkyPortal
-        An instance of the SkyPortal API client.
-    payload : dict
-        The payload to use for the get_objects API call.
-    snr_threshold : float
-        The signal-to-noise ratio threshold for the first detection.
-    first_detection_fallback : int
-        First detection fallback in mjd.
+    Args:
+        msg: The message object containing the Avro data.
 
-    Returns
-    -------
-    results : list
-        A list of objects with their filtered photometry.
-    total_objs : int
-        The total number of objects retrieved before filtering.
-
+    Returns:
+        The first record found in the Avro message, or None if no records are found.
     """
-    objs = skyportal.get_objects(payload)
-    results = []
-    for obj in objs:
-        photometry = skyportal.get_object_photometry(obj["id"])
-        last_non_detection = []
-        filtered_photometry = []
-        for phot in reversed(photometry):
-            if phot["snr"]: # If it's a detection
-                last_non_detection = [] # Reset last non-detection as we found a detection
-                filtered_photometry.append(phot)
-                if phot["snr"] >= snr_threshold and phot["mjd"] < first_detection_fallback:
-                    break
-            elif not last_non_detection:
-                last_non_detection = [phot]
-        else: # If no detection before the fallback, keep the object
-            results.append({
-                **obj,
-                "filtered_photometry": last_non_detection + list(reversed(filtered_photometry))
-            })
-    return results, len(objs)
 
-def get_new_skymaps_for_processed_obj(obj, skymaps, last_processed_mjd, is_first_run=False):
-    """
-    If the object has already been processed
-    (i.e., has more than one filtered photometry point in less than sleeping time),
-    return only the skymaps that are newer than the last processed photometry point.
-    Parameters
-    ----------
-    obj : dict
-        The object containing photometry data.
-    skymaps : list of tuples
-        List of tuples where each tuple contains a skymap dateobs, its alias, and the corresponding MOC.
-    last_processed_mjd : int
-        The last processed time in mjd.
-    is_first_run : bool, optional
-        Whether this is the first run (default is False). If True, all skymaps are returned.
+    bytes_io = io.BytesIO(msg.value())  # Get the message value as bytes
+    bytes_io.seek(0)
+    for record in fastavro.reader(bytes_io):
+        return record  # Return the first record found
+    return None  # Return None if no records are found or if an error occurs
 
-    Returns
-    -------
-    list
-        A list of tuples containing the dateobs, alias, and MOC of skymaps that are newer than the last processed photometry point.
-
-    """
-    # Remove the last photometry point as it is the one that triggered the current processing
-    photometry = obj.get("filtered_photometry", [])[:-1]
-    if len(photometry) < 1 or is_first_run:
-        return skymaps
-
-    for phot in reversed(photometry):
-        if phot["mjd"] < last_processed_mjd:
-            last_processed_alert_mjd = phot["mjd"]
-            break
-    else: # If no alert have been already processed, return all skymaps
-        return skymaps
-
-    return [(dateobs, alias, moc) for dateobs, alias, moc in skymaps if Time(dateobs).mjd >= last_processed_alert_mjd]
+def get_snr(phot):
+  if phot["flux"] is None or not phot["flux_err"]:
+      return None
+  return phot["flux"] / phot["flux_err"]

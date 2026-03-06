@@ -3,11 +3,13 @@ import time
 import argparse
 import traceback
 
+from datetime import datetime
+
 from astropy.time import Time
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from confluent_kafka import Consumer
 from api import SkyPortal, APIError
-from utils import get_skymaps, get_and_process_valid_obj, is_obj_in_skymaps, get_new_skymaps_for_processed_obj, log, RED, ENDC
+from utils import get_skymaps, is_obj_in_skymaps, fallback, log, RED, ENDC, read_avro, get_snr
 from gcn_notices import send_to_gcn, setup_telescope_list
 
 load_dotenv()
@@ -19,110 +21,143 @@ group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 
 GCN = 48  # hours for GCN fallback
 ALERT = 12  # hours for alert fallback
-FIRST_DETECTION = 48  # hours for first detection fallback
+FIRST_DETECTION = 24  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 
-def fallback(hours=0, seconds=0, date_format=None):
-    date = datetime.utcnow() - timedelta(hours=hours, seconds=seconds)
-    if date_format == "iso":
-        return date.isoformat()
-    if date_format == "mjd":
-        return Time(date).mjd
-    return date
+config = {
+    'bootstrap.servers': os.getenv("BOOM_KAFKA_SERVERS"),
+    'group.id': f'umn_boom_kafka_consumer_group_{int(time.time())}',
+    'auto.offset.reset': 'earliest',
+    "enable.auto.commit": False,
+}
+if os.getenv("BOOM_KAFKA_USERNAME") and os.getenv("BOOM_KAFKA_PASSWORD"):
+    config.update({
+        "security.protocol": "SASL_PLAINTEXT",
+        "sasl.mechanism": "SCRAM-SHA-512",
+        "sasl.username": os.getenv("BOOM_KAFKA_USERNAME"),
+        "sasl.password": os.getenv("BOOM_KAFKA_PASSWORD"),
+    })
+else:
+    config["security.protocol"] = "PLAINTEXT"
 
+consumer = Consumer(config)
+topic = os.getenv("BOOM_KAFKA_TOPIC")
+consumer.subscribe([topic])
+log(f"Subscribed to topic: {topic}")
 
 def crossmatch_alert_to_skymaps():
     skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
     setup_telescope_list(skyportal)
-    latest_obj_refresh = fallback(ALERT)
     cumulative_probability = 0.95
     snr_threshold = 5.0
     skymaps = {}
+    timer = None
 
-    # Flags to control logging
+    # Flags
     no_skymaps = False
-    no_new_object = False
-    is_first_run = True
+    no_new_alert = False
+    jd_of_first_processed_alert = None
 
     while True:
         try:
-            # Check if SkyPortal is available
-            skyportal.ping()
+            # only check that every SLEEP_TIME seconds to avoid hitting the API
+            if not timer or time.time() - timer >= SLEEP_TIME:
+                timer = time.time() # reset timer
 
-            # Check for new GCN events or new localizations for existing events with "< 1000 sq. deg." tag
-            new_gcn_events = []
-            for event in skyportal.get_gcn_events(fallback(GCN)):
-                event["localization"] = next(
-                    (loc for loc in event.get("localizations", [])
-                     if any(tag["text"] == "< 1000 sq. deg." for tag in loc.get("tags", []))),
-                    None
-                )
-                if event["localization"] is None:
-                    continue
-                elif event["id"] not in skymaps:
-                    new_gcn_events.append(event)
-                elif event["localization"]["dateobs"] > skymaps[event["id"]][0]:
-                    new_gcn_events.append(event)
+                # Check if SkyPortal is available
+                skyportal.ping()
 
-            if new_gcn_events:
-                start_time = time.time()
-                # Get skymaps for new GCN events
-                # Returns [{event_id: (dateobs, alias, moc)}, ...]
-                new_skymaps = get_skymaps(skyportal, cumulative_probability, new_gcn_events)
-                for event_id, skymap_tuple in new_skymaps.items():
-                    skymaps[event_id] = skymap_tuple
-                log(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
-
-            elif skymaps: # If no new GCNs, check for expired localizations and remove them
-                gcn_fallback_iso = fallback(GCN, date_format="iso")
-                expired = [event_id for event_id, (dateobs, alias, moc) in skymaps.items() if dateobs < gcn_fallback_iso]
-                for event_id in expired:
-                    log(f"Removed expired skymap {skymaps[event_id][0]}")
-                    del skymaps[event_id]
-
-            # Retrieve objects created after last refresh time
-            if skymaps:
-                get_objects_payload = {
-                    "startDate": max(latest_obj_refresh, fallback(ALERT)).isoformat(),
-                }
-                if group_ids_to_listen:
-                    get_objects_payload["groupIDs"] = group_ids_to_listen
-
-                refresh_time=datetime.utcnow()
-                start_time = time.time()
-                objs, nb_objs_before_filtering = get_and_process_valid_obj(
-                    skyportal,
-                    get_objects_payload,
-                    snr_threshold,
-                    fallback(FIRST_DETECTION, date_format="mjd")
-                )
-                latest_obj_refresh = refresh_time # Update the refresh time after successful query
-                if objs:
-                    log(f"Found {len(objs)} new valid objects on {nb_objs_before_filtering} in {time.time() - start_time:.2f} seconds")
-                nb_crossmatches = 0
-                start_time = time.time()
-                for obj in objs:
-                    skymaps_tuples = list(skymaps.values())
-                    new_skymaps_tuples = get_new_skymaps_for_processed_obj(
-                        obj,
-                        skymaps_tuples,
-                        fallback(seconds=SLEEP_TIME,date_format="mjd"),
-                        is_first_run,
+                # Check for new GCN events or new localizations for existing events with "< 1000 sq. deg." tag
+                new_gcn_events = []
+                for event in skyportal.get_gcn_events(fallback(GCN)):
+                    event["localization"] = next(
+                        (loc for loc in event.get("localizations", [])
+                         if any(tag["text"] == "< 1000 sq. deg." for tag in loc.get("tags", []))),
+                        None
                     )
-                    matching_skymaps = is_obj_in_skymaps(obj["ra"], obj["dec"], new_skymaps_tuples)
-                    if matching_skymaps:
-                        # Perform actions for each crossmatched object
-                        send_to_gcn(obj, matching_skymaps, notify_slack=True)
-                        nb_crossmatches += 1
-                if objs:
-                    log(f"Found {nb_crossmatches} crossmatches in {time.time() - start_time:.2f} seconds")
-                    no_new_object = False
-                elif not no_new_object: # Only log once when no new objects are found
-                    log(f"No new objects found. Waiting...")
+                    if event["localization"] is None:
+                        continue
+                    elif event["id"] not in skymaps:
+                        new_gcn_events.append(event)
+                    elif event["localization"]["dateobs"] > skymaps[event["id"]][0]:
+                        new_gcn_events.append(event)
+
+                if new_gcn_events:
+                    start_time = time.time()
+                    # Get skymaps for new GCN events
+                    # Returns [{event_id: (dateobs, alias, moc)}, ...]
+                    new_skymaps = get_skymaps(skyportal, cumulative_probability, new_gcn_events)
+                    for event_id, skymap_tuple in new_skymaps.items():
+                        skymaps[event_id] = skymap_tuple
+                    log(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
+
+                if skymaps: # If some skymaps are available, check for expired localizations and remove them
+                    gcn_fallback_iso = fallback(GCN, date_format="iso")
+                    expired = [event_id for event_id, (dateobs, alias, moc) in skymaps.items() if dateobs < gcn_fallback_iso]
+                    for event_id in expired:
+                        log(f"Removed expired skymap {skymaps[event_id][0]}")
+                        del skymaps[event_id]
+
+            # Consume new alerts passing a given filter from Boom Kafka and crossmatch with skymaps
+            msg = consumer.poll(timeout=10.0)
+            if msg is None:
+                if not no_new_alert: # Only log once when no new alerts are found
+                    no_new_alert = True
+                    log(f"No new alerts available")
                     log("               .")
                     log("               .")
                     log("               .")
-                    no_new_object = True
+                continue
+            if msg.error():
+                log(f"Consumer error: {msg.error()}")
+                continue
+            no_new_alert = False
+
+            if not jd_of_first_processed_alert:
+                jd_of_first_processed_alert = Time(datetime.utcnow()).jd
+            if skymaps:
+                alert = read_avro(msg)
+
+                if not any(filter.get("filter_name") == os.getenv("BOOM_KAFKA_FILTER") for filter in alert.get("filters", [])):
+                    continue
+
+                last_non_detection = []
+                filtered_photometry = []
+                too_old_object = False
+                for phot in reversed(alert.get("photometry", [])): # From the most recent to the oldest
+                    if phot["origin"] == "ForcedPhot":
+                        continue
+
+                    snr = get_snr(phot)
+                    if snr: # If it's a detection
+                        last_non_detection = []  # Reset last non-detection as we found a detection
+                        filtered_photometry.append(phot)
+                        if snr >= snr_threshold and phot["jd"] < fallback(FIRST_DETECTION, date_format="jd"):
+                            too_old_object = True
+                            break
+                    elif not last_non_detection:
+                        last_non_detection = [phot]
+
+                if too_old_object:
+                    log(f"Object {alert['objectId']} is too old (at least one detection with SNR >= {snr_threshold} is older than {FIRST_DETECTION} hours). Skipping.")
+                    continue
+
+                # Keep the last non-detection (if it exists) and all detections (other than the last one which are the one who triggered the alert)
+                filtered_photometry = last_non_detection + list(reversed(filtered_photometry))[:-1]
+                # If the last photometry point have already been processed (i.e. its jd is after the first processed alert of this code)
+                if filtered_photometry and jd_of_first_processed_alert < filtered_photometry[-1]["jd"]:
+                    # only keep new skymaps since the last processed alert
+                    new_skymaps_tuples = [(dateobs, alias, moc) for dateobs, alias, moc in skymaps.values() if
+                               Time(dateobs).jd >= filtered_photometry[-1]["jd"]]
+                else:
+                    new_skymaps_tuples = list(skymaps.values())
+
+                matching_skymaps = is_obj_in_skymaps(alert["ra"], alert["dec"], new_skymaps_tuples)
+                if matching_skymaps:
+                    # Perform actions for each crossmatched alert
+                    alert["filtered_photometry"] = filtered_photometry
+                    send_to_gcn(alert, matching_skymaps, notify_slack=True)
+
             elif not no_skymaps:  # Only log once when no skymaps are available
                 log("No skymaps available. Waiting...")
                 log("               .")
@@ -135,9 +170,6 @@ def crossmatch_alert_to_skymaps():
         except Exception:
             log(f"{RED}An error occurred:{ENDC}")
             traceback.print_exc()
-
-        if is_first_run: is_first_run = False
-        time.sleep(SLEEP_TIME)
 
 if __name__ == "__main__":
     # --- CLI arguments ---
