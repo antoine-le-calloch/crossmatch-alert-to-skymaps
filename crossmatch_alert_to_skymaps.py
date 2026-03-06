@@ -154,6 +154,7 @@ def crossmatch_alert_to_skymaps():
 
                 matching_skymaps = is_obj_in_skymaps(alert["ra"], alert["dec"], new_skymaps_tuples)
                 if matching_skymaps:
+                    log(f"Alert {alert['objectId']} matches the following skymaps: {[alias for _, alias, _ in matching_skymaps]}")
                     # Perform actions for each crossmatched alert
                     alert["filtered_photometry"] = filtered_photometry
                     send_to_gcn(alert, matching_skymaps, notify_slack=True)
