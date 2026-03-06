@@ -139,7 +139,7 @@ def crossmatch_alert_to_skymaps():
                         last_non_detection = [phot]
 
                 if too_old_object:
-                    log(f"Object {alert['objectId']} is too old (at least one detection with SNR >= {snr_threshold} is older than {FIRST_DETECTION} hours). Skipping.")
+                    # log(f"Object {alert['objectId']} is too old (at least one detection with SNR >= {snr_threshold} is older than {FIRST_DETECTION} hours). Skipping.")
                     continue
 
                 # Keep the last non-detection (if it exists) and all detections (other than the last one which are the one who triggered the alert)
