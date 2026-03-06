@@ -63,4 +63,4 @@ def send_to_slack(obj, matching_skymaps, gcn_payload):
             initial_comment=f"*Alias:* <{skyportal_url}/gcn_events/{date}|{alias}>",
             file=get_crossmatch_plot(obj, moc),
         )
-    time.sleep(1) # Wait for the files to be uploaded
+    time.sleep(1.5) # Wait for the files to be uploaded
