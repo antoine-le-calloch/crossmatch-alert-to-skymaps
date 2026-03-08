@@ -55,7 +55,6 @@ def crossmatch_alert_to_skymaps():
 
     # Flags
     no_skymaps = False
-    no_new_alert = False
     jd_of_first_processed_alert = None
 
     while True:
@@ -101,17 +100,10 @@ def crossmatch_alert_to_skymaps():
             # Consume new alerts passing a given filter from Boom Kafka and crossmatch with skymaps
             msg = consumer.poll(timeout=10.0)
             if msg is None:
-                if not no_new_alert: # Only log once when no new alerts are found
-                    no_new_alert = True
-                    log(f"No new alerts available")
-                    log("               .")
-                    log("               .")
-                    log("               .")
                 continue
             if msg.error():
                 log(f"Consumer error: {msg.error()}")
                 continue
-            no_new_alert = False
 
             if not jd_of_first_processed_alert:
                 jd_of_first_processed_alert = Time(datetime.utcnow()).jd
