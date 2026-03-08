@@ -1,3 +1,5 @@
+from astropy.time import Time
+
 from slack import send_to_slack
 
 telescope_by_instrument_id = {}
@@ -18,27 +20,31 @@ def prepare_gcn_payload(obj, matching_skymaps):
         "data": {
             "targets": [
                 {
-                    "name": obj["objectId"],
+                    "event_name": obj["objectId"],
                     "ra": obj["ra"],
                     "dec": obj["dec"],
-                    "classifications": [{
-                        "classification": classification["classifier"],
-                        "probability": classification["score"],
-                    } for classification in obj.get("classifications", [])],
-                    "gcn_crossmatch":  [alias for _, alias, _ in matching_skymaps],
+                    "classification_scores": {
+                        classification["classifier"]: classification["score"]
+                        for classification in obj.get("classifications", [])
+                    },
+                    "gcn_crossmatch":  [{
+                        "ref_type": "ref_type",
+                        "ref_instrument": "ref_instrument",
+                        "ref_ID": alias
+                    } for _, alias, _ in matching_skymaps],
                 }
             ],
             "photometry": [{
-                "target_name": obj["objectId"],
-                "date_obs": p["jd"],
+                "event_name": obj["objectId"],
+                "observation_start": Time(p["jd"], format="jd").iso,
                 "telescope": "Palomar 1.2m Oschin",
                 "instrument": "ZTF",
-                "bandpass": p["band"],
+                "filter": [p["band"]],
                 "brightness": p["flux"],
                 "brightness_error": p["flux_err"],
-                "unit": "ab",
+                "brightness_unit": "ab",
                 # "limiting_brightness": p["limiting_mag"],
-                # "limiting_brightness_unit": "ab",
+                "limiting_brightness_unit": "ab"
             } for p in obj["filtered_photometry"]]
         },
     }
