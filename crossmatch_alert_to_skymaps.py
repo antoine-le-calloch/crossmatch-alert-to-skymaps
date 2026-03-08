@@ -142,13 +142,14 @@ def crossmatch_alert_to_skymaps():
                     # log(f"Object {alert['objectId']} is too old (at least one detection with SNR >= {snr_threshold} is older than {FIRST_DETECTION} hours). Skipping.")
                     continue
 
-                # Keep the last non-detection (if it exists) and all detections (other than the last one which are the one who triggered the alert)
-                filtered_photometry = last_non_detection + list(reversed(filtered_photometry))[:-1]
-                # If the last photometry point have already been processed (i.e. its jd is after the first processed alert of this code)
-                if filtered_photometry and jd_of_first_processed_alert < filtered_photometry[-1]["jd"]:
-                    # only keep new skymaps since the last processed alert
+                # Keep the last non-detection and all detections
+                filtered_photometry = last_non_detection + list(reversed(filtered_photometry))
+                # If the last photometry point (other than the last one which are the one who triggered the alert)
+                # have already been processed (i.e. its jd is after the first processed alert of this code)
+                # only keep new skymaps since the last processed alert
+                if len(filtered_photometry) > 2 and jd_of_first_processed_alert < filtered_photometry[-2]["jd"]:
                     new_skymaps_tuples = [(dateobs, alias, moc) for dateobs, alias, moc in skymaps.values() if
-                               Time(dateobs).jd >= filtered_photometry[-1]["jd"]]
+                               Time(dateobs).jd >= filtered_photometry[-2]["jd"]]
                 else:
                     new_skymaps_tuples = list(skymaps.values())
 
