@@ -20,7 +20,6 @@ allocation_id = os.getenv("ALLOCATION_ID")
 group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 
 GCN = 48  # hours for GCN fallback
-ALERT = 12  # hours for alert fallback
 FIRST_DETECTION = 24  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 
@@ -169,10 +168,16 @@ if __name__ == "__main__":
     # --- CLI arguments ---
     parser = argparse.ArgumentParser(description="Crossmatch alerts with GCN skymaps.")
     parser.add_argument(
-        "--alert-fallback",
-        "-af",
+        "--gcn",
+        "-g",
         type=int,
-        help="Alert fallback in hours (default: 12).",
+        help="GCN fallback in hours (default: 48).",
+    )
+    parser.add_argument(
+        "--detection",
+        "-d",
+        type=int,
+        help="First detection fallback in hours (default: 24).",
     )
     parser.add_argument(
         "--clean-slack",
@@ -181,7 +186,8 @@ if __name__ == "__main__":
         help="Whether to delete all current bot messages in the Slack channel before starting the script.",
     )
     args = parser.parse_args()
-    ALERT = args.alert_fallback or ALERT
+    GCN = args.gcn or GCN
+    FIRST_DETECTION = args.detection or FIRST_DETECTION
     if args.clean_slack:
         from slack import delete_all_bot_messages
         delete_all_bot_messages()
