@@ -166,18 +166,30 @@ def crossmatch_alert_to_skymaps():
 
 if __name__ == "__main__":
     # --- CLI arguments ---
-    parser = argparse.ArgumentParser(description="Crossmatch alerts with GCN skymaps.")
+    parser = argparse.ArgumentParser(
+        description="Crossmatch alerts with GCN skymaps.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument(
         "--gcn",
         "-g",
         type=int,
-        help="GCN fallback in hours (default: 48).",
+        default=GCN,
+        help="GCN fallback in hours.",
     )
     parser.add_argument(
         "--detection",
         "-d",
         type=int,
-        help="First detection fallback in hours (default: 24).",
+        default=FIRST_DETECTION,
+        help="First detection fallback in hours.",
+    )
+    parser.add_argument(
+        "--sleep-time",
+        "-s",
+        type=int,
+        default=SLEEP_TIME,
+        help="Time in seconds to wait between each check for new GCN events.",
     )
     parser.add_argument(
         "--clean-slack",
@@ -186,8 +198,8 @@ if __name__ == "__main__":
         help="Whether to delete all current bot messages in the Slack channel before starting the script.",
     )
     args = parser.parse_args()
-    GCN = args.gcn or GCN
-    FIRST_DETECTION = args.detection or FIRST_DETECTION
+    GCN = args.gcn
+    FIRST_DETECTION = args.detection
     if args.clean_slack:
         from slack import delete_all_bot_messages
         delete_all_bot_messages()
