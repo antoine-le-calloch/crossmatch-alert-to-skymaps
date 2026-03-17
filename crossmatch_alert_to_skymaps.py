@@ -40,11 +40,6 @@ if os.getenv("BOOM_KAFKA_USERNAME") and os.getenv("BOOM_KAFKA_PASSWORD"):
 else:
     config["security.protocol"] = "PLAINTEXT"
 
-consumer = Consumer(config)
-topic = os.getenv("BOOM_KAFKA_TOPIC")
-consumer.subscribe([topic])
-log(f"Subscribed to topic: {topic}")
-
 def crossmatch_alert_to_skymaps():
     skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
     setup_telescope_list(skyportal)
@@ -52,6 +47,13 @@ def crossmatch_alert_to_skymaps():
     snr_threshold = 5.0
     skymaps = {}
     timer = None
+
+    # Subscribe to Boom Kafka topics
+    consumer = Consumer(config)
+    topic = os.getenv("BOOM_KAFKA_TOPIC")
+    consumer.subscribe([topic])
+    log(f"Subscribed to topic: {topic}")
+    log(f"Listening for alerts passing the following Boom filters: {boom_filters}")
 
     # Flags
     no_skymaps = False
