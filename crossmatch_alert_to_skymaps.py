@@ -18,6 +18,7 @@ skyportal_url = os.getenv("SKYPORTAL_URL")
 skyportal_api_key = os.getenv("SKYPORTAL_API_KEY")
 allocation_id = os.getenv("ALLOCATION_ID")
 group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
+boom_filters = os.getenv("BOOM_KAFKA_FILTERS").split(",")
 
 GCN = 48  # hours for GCN fallback
 FIRST_DETECTION = 24  # hours for first detection fallback
@@ -109,8 +110,6 @@ def crossmatch_alert_to_skymaps():
             if skymaps:
                 alert = read_avro(msg)
 
-                if not any(filter.get("filter_name") == os.getenv("BOOM_KAFKA_FILTER") for filter in alert.get("filters", [])):
-                    continue
 
                 last_non_detection = []
                 filtered_photometry = []
@@ -118,6 +117,8 @@ def crossmatch_alert_to_skymaps():
                 for phot in reversed(alert.get("photometry", [])): # From the most recent to the oldest
                     if phot["origin"] == "ForcedPhot":
                         continue
+                if not any(filter.get("filter_name") in boom_filters for filter in alert.get("filters", [])):
+                    continue
 
                     snr = get_snr(phot)
                     if snr: # If it's a detection
