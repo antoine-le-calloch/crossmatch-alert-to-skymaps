@@ -18,6 +18,25 @@ def log(message):
 
 
 def fallback(hours=0, seconds=0, date_format=None):
+    """Get a fallback date by subtracting a specified amount of time from the current UTC time.
+
+    Parameters
+    ----------
+    hours : int, optional
+        The number of hours to subtract from the current time (default is 0).
+    seconds : int, optional
+        The number of seconds to subtract from the current time (default is 0).
+    date_format : str, optional
+        The format in which to return the date (default is None, which returns a datetime object).
+        If "iso", returns an ISO 8601 string.
+        If "mjd", returns the Modified Julian Date.
+        If "jd", returns the Julian Date.
+
+    Returns
+    -------
+    datetime or str or float
+        The fallback date in the specified format.
+    """
     date = datetime.utcnow() - timedelta(hours=hours, seconds=seconds)
     if date_format == "iso":
         return date.isoformat()
@@ -30,6 +49,7 @@ def fallback(hours=0, seconds=0, date_format=None):
 
 def get_moc_from_fits(bytes, cumulative_probability):
     """Extract MOC from a FITS file containing a HEALPix skymap map.
+
     Parameters
     ----------
     bytes : io.BytesIO
@@ -78,75 +98,67 @@ def get_moc_from_fits(bytes, cumulative_probability):
     return MOC.from_valued_healpix_cells(uniq, prob, 29, cumul_to=cumulative_probability)
 
 
-def get_skymaps(skyportal, cumulative_probability, gcn_events):
-    """Get all skymaps from SkyPortal since a given date. For each skymap,
-    compute the MOC corresponding to the cumulative_probability threshold.
+def get_skymap(skyportal, cumulative_probability, localization):
+    """Fetch the skymap for a given localization from the SkyPortal API
+    and extract the MOC corresponding to the cumulative_probability threshold.
 
     Parameters
     ----------
     skyportal : SkyPortal
         An instance of the SkyPortal API client.
-    gcn_events : list of dict
-        A list of GCN event filtered and populated with the most recent localization > 1000 sq. deg.
     cumulative_probability : float
         The cumulative probability threshold for the MOC. Only tiles contributing
         to this cumulative probability will be included in the MOC.
+    localization : dict
+        A dictionary containing the localization information.
 
     Returns
     -------
-    results : dict
-        A dictionary where keys are GCN event IDs and values are tuples of (skymap dateobs, alias, MOC).
+    moc : MOC
+        The MOC corresponding to the cumulative_probability threshold for the given localization.
     """
-    results = {}
-    for gcn_event in gcn_events:
-        skymap = gcn_event["localization"]
-        bytesIO_file = skyportal.download_localization(skymap["dateobs"], skymap["localization_name"])
-        moc = get_moc_from_fits(bytesIO_file, cumulative_probability)
-        if gcn_event.get("aliases"):
-            alias = gcn_event.get("aliases")[0].split('#')[-1]
-        else:
-            alias = f"No aliases"
-        results[gcn_event["id"]] = (skymap["dateobs"], alias, moc)
-
-    return results
+    bytesIO_file = skyportal.download_localization(localization["dateobs"], localization["localization_name"])
+    return get_moc_from_fits(bytesIO_file, cumulative_probability)
 
 
 def is_obj_in_skymaps(ra, dec, skymaps):
     """
     Check if an object is within any of the provided skymaps (MOCs).
+
     Parameters
     ----------
     ra : float
         Right Ascension of the object in degrees.
     dec : float
         Declination of the object in degrees.
-    skymaps : list of tuples
-        List of tuples where each tuple contains a skymap dateobs, its alias, and the corresponding MOC.
+    skymaps : dict
+        A dictionary where keys are dateobs and values are dictionaries containing 'alias' and 'moc' (MOC object).
 
     Returns
     -------
-    list
-        A list of tuples containing the dateobs, alias, and the MOC of skymaps that contain the object.
+    dict
+        A dictionary of skymaps where keys are dateobs and values are dictionaries containing 'alias' and 'moc' (MOC object).
     """
-    matching_skymaps = [
-        (dateobs, alias, moc)
-        for dateobs, alias, moc in skymaps
-        if moc.contains_lonlat(ra * u.deg, dec * u.deg)
-    ]
-    return matching_skymaps
+    return {
+        dateobs: skymap for dateobs, skymap in skymaps.items() if
+        skymap.get("moc").contains_lonlat(ra * u.deg, dec * u.deg)
+    }
 
 
 def read_avro(msg):
     """
     Reads an Avro record from a Kafka message.
 
-    Args:
-        msg: The message object containing the Avro data.
+    Parameters
+    ----------
+    msg : Kafka message
+        The Kafka message containing the Avro record.
 
-    Returns:
+    Returns
+    -------
+    dict or None
         The first record found in the Avro message, or None if no records are found.
     """
-
     bytes_io = io.BytesIO(msg.value())  # Get the message value as bytes
     bytes_io.seek(0)
     for record in fastavro.reader(bytes_io):
@@ -154,23 +166,23 @@ def read_avro(msg):
     return None  # Return None if no records are found or if an error occurs
 
 
-def get_snr(phot):
-  if phot["flux"] is None or not phot["flux_err"]:
-      return None
-  return phot["flux"] / phot["flux_err"]
-
-
 def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     """
     Filter the photometry of an alert to keep only the last non-detection and all detections,
     while also checking if the object is too old based on the SNR threshold and the first detection fallback.
 
-    Args:
-        alert (dict): The alert containing photometry data.
-        snr_threshold (float): The SNR threshold to consider an object as too old.
-        first_detection_fallback (float): The Julian Date fallback for the first detection
-    Returns:
-        list: A list of photometry points that includes the last non-detection and all detections, or None if too old.
+    Parameters
+    ----------
+    alert : dict
+        The alert containing photometry data.
+    snr_threshold : float
+        The SNR threshold to consider an object as too old.
+    first_detection_fallback : float
+        The Julian Date fallback for the first detection
+    Returns
+    -------
+    list
+        A list of photometry points that includes the last non-detection and all detections, or None if too old.
     """
     last_non_detection = []
     filtered_photometry = []
@@ -178,11 +190,10 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
         if phot["origin"] == "ForcedPhot":
             continue
 
-        snr = get_snr(phot)
-        if snr:  # If it's a detection
+        if phot["flux"] and phot["flux_err"]:  # If it's a detection
             last_non_detection = []  # Reset last non-detection as we found a detection
             filtered_photometry.append(phot)
-            if snr >= snr_threshold and phot["jd"] < first_detection_fallback:
+            if phot["flux"] / phot["flux_err"] >= snr_threshold and phot["jd"] < first_detection_fallback:
                 # If at least one detection with SNR >= {snr_threshold} is older than first_detection_fallback, consider the object as too old and skip it
                 return None
         elif not last_non_detection:

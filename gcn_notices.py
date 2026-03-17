@@ -28,10 +28,10 @@ def prepare_gcn_payload(obj, matching_skymaps):
                         for classification in obj.get("classifications", [])
                     },
                     "gcn_crossmatch":  [{
-                        "ref_type": "ref_type",
-                        "ref_instrument": "ref_instrument",
-                        "ref_ID": alias
-                    } for _, alias, _ in matching_skymaps],
+                        "ref_type": "ref_type", # TODO: need to figure out what to put here
+                        "ref_instrument": "ref_instrument", # TODO: need to figure out what to put here
+                        "ref_ID": skymap["alias"], # TODO: need to figure out what to put here
+                    } for skymap in matching_skymaps.values()],
                 }
             ],
             "photometry": [{

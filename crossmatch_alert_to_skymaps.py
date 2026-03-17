@@ -10,7 +10,7 @@ from api import SkyPortal, APIError
 from utils import (
     get_filtered_photometry,
     is_obj_in_skymaps,
-    get_skymaps,
+    get_skymap,
     read_avro,
     fallback,
     log,
@@ -23,8 +23,6 @@ load_dotenv()
 
 skyportal_url = os.getenv("SKYPORTAL_URL")
 skyportal_api_key = os.getenv("SKYPORTAL_API_KEY")
-allocation_id = os.getenv("ALLOCATION_ID")
-group_ids_to_listen = os.getenv("GROUP_IDS_TO_LISTEN")
 boom_filters = os.getenv("BOOM_KAFKA_FILTERS").split(",")
 
 GCN = 48  # hours for GCN fallback
@@ -52,8 +50,8 @@ def crossmatch_alert_to_skymaps():
     setup_telescope_list(skyportal)
     cumulative_probability = 0.95
     snr_threshold = 5.0
-    processed_alerts = {}  # {objectId: {"skymaps": set((alias, dateobs)), "first_detection_jd": float}}
-    skymaps = {}
+    processed_alerts = {}  # {objectId: {"skymaps": set((dateobs,created_at)), "first_detection_jd": float}}
+    skymaps = {} # {dateobs: {"alias": str, "moc": MOC, "created_at": str}}
     timer = None
 
     # Subscribe to Boom Kafka topics
@@ -85,37 +83,36 @@ def crossmatch_alert_to_skymaps():
                     )
                     if event["localization"] is None:
                         continue
-                    elif event["id"] not in skymaps:
+                    elif event["dateobs"] not in skymaps:
                         new_gcn_events.append(event)
-                    elif event["localization"]["dateobs"] > skymaps[event["id"]][0]:
+                    elif skymaps[event["dateobs"]].get("created_at") < event["localization"]["created_at"]:
+                        # If the localization is newer than the one we have for that dateobs, we should recompute this event
                         new_gcn_events.append(event)
 
+                for gcn_event in new_gcn_events:
+                    moc = get_skymap(skyportal, cumulative_probability, gcn_event["localization"])
+                    skymaps[gcn_event["dateobs"]] = {
+                        "alias": gcn_event["aliases"][0] if gcn_event.get("aliases") else "No aliases",
+                        "moc": moc,
+                        "created_at": gcn_event["localization"]["created_at"],
+                    }
                 if new_gcn_events:
-                    start_time = time.time()
-                    # Get skymaps for new GCN events
-                    # Returns [{event_id: (dateobs, alias, moc)}, ...]
-                    new_skymaps = get_skymaps(skyportal, cumulative_probability, new_gcn_events)
-                    for event_id, skymap_tuple in new_skymaps.items():
-                        skymaps[event_id] = skymap_tuple
-                    log(f"Fetching {len(skymaps)} skymaps and creating MOCs took {time.time() - start_time:.2f} seconds")
+                    log(f"Fetching {len(new_gcn_events)} skymaps and creating MOCs")
 
-                if skymaps: # If some skymaps are available, check for expired localizations and remove them
-                    gcn_fallback_iso = fallback(GCN, date_format="iso")
-                    expired = [event_id for event_id, (dateobs, alias, moc) in skymaps.items() if dateobs < gcn_fallback_iso]
-                    for event_id in expired:
-                        log(f"Removed expired skymap {skymaps[event_id][0]}")
-                        del skymaps[event_id]
+                # Clean up old skymaps (GCN events older than fallback)
+                gcn_fallback_iso = fallback(GCN, date_format="iso")
+                for dateobs in list(skymaps.keys()):
+                    if dateobs < gcn_fallback_iso:
+                        log(f"Removed expired skymap {dateobs} from skymaps")
+                        del skymaps[dateobs]
 
-                # Clean up old objects from processed_alerts (first detection too old)
-                expired_objects = [
-                    obj_id for obj_id, info in processed_alerts.items()
-                    if info["first_detection_jd"] < fallback(FIRST_DETECTION, date_format="jd")
-                ]
-                for obj_id in expired_objects:
-                    log(f"Removed {obj_id} from processed alerts (first detection too old)")
-                    del processed_alerts[obj_id]
+                first_detection_fallback_jd = fallback(FIRST_DETECTION, date_format="jd")
+                for obj_id, info in list(processed_alerts.items()):
+                    if info["first_detection_jd"] < first_detection_fallback_jd:
+                        log(f"Removed expired object {obj_id} from processed_alerts")
+                        del processed_alerts[obj_id]
 
-            # Consume new alerts passing a given filter from Boom Kafka and crossmatch with skymaps
+            # Consume new alerts passing a set of filters from Boom Kafka and crossmatch them with available skymaps
             msg = consumer.poll(timeout=10.0)
             if msg is None:
                 continue
@@ -134,24 +131,32 @@ def crossmatch_alert_to_skymaps():
                 if not filtered_photometry or len(filtered_photometry) < 2:
                     continue # The First detection is too old or the alert doesn't have any non-detection
 
-                # Only keep skymaps between last non-detection and first detection, excluding already processed ones
-                filtered_skymaps_tuples = [
-                    (dateobs, alias, moc) for dateobs, alias, moc in skymaps.values() if
-                    filtered_photometry[0]["jd"] <= Time(dateobs).jd <= filtered_photometry[1]["jd"] + 1  # add 1 day margin for updated localizations
-                    and (alias, dateobs) not in processed_alerts.get(obj_id, {}).get("skymaps", set())
-                ]
+                filtered_skymaps = {}
+                for dateobs, skymap in skymaps.items():
+                    if not filtered_photometry[0]["jd"] <= Time(dateobs).jd <= filtered_photometry[1]["jd"]:
+                        continue # Skymap is not between the last non-detection and the first detection
+                    if obj_id in processed_alerts and (dateobs, skymap["created_at"]) in processed_alerts[obj_id].get("skymaps", set()):
+                        log(f"Skipping already processed skymap {dateobs} for object {obj_id}")
+                    else:
+                        filtered_skymaps[dateobs] = skymap
 
-                matching_skymaps = is_obj_in_skymaps(alert["ra"], alert["dec"], filtered_skymaps_tuples)
+                matching_skymaps = is_obj_in_skymaps(alert["ra"], alert["dec"], filtered_skymaps)
                 if matching_skymaps:
                     # Process the crossmatch results here (e.g., send to GCN, log, etc.)
-                    log(f"{obj_id} matches the following skymaps: {[alias for _, alias, _ in matching_skymaps]}")
+                    skymaps_string = ", ".join([f"{skymap.get('alias')}/{skymap.get('created_at')}" for skymap in matching_skymaps.values()])
+                    log(f"{obj_id} matches the following skymaps: {skymaps_string}")
                     alert["filtered_photometry"] = filtered_photometry
                     send_to_gcn(alert, matching_skymaps, notify_slack=True)
 
                     # Add the object and matching skymaps to processed_alerts to avoid re-processing
-                    processed_alerts.setdefault(obj_id, {
-                        "skymaps": set(), "first_detection_jd": filtered_photometry[1]["jd"]
-                    })["skymaps"].update((alias, dateobs) for dateobs, alias, _ in matching_skymaps)
+                    dateobs_created_at_tuple = set((dateobs, skymap["created_at"]) for dateobs, skymap in matching_skymaps.items())
+                    if obj_id not in processed_alerts:
+                        processed_alerts[obj_id] = {
+                            "skymaps": dateobs_created_at_tuple,
+                            "first_detection_jd": filtered_photometry[1]["jd"],
+                        }
+                    else:
+                        processed_alerts[obj_id]["skymaps"].update(dateobs_created_at_tuple)
 
             elif not no_skymaps:  # Only log once when no skymaps are available
                 log("No skymaps available. Waiting...")
@@ -202,6 +207,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     GCN = args.gcn
     FIRST_DETECTION = args.detection
+    SLEEP_TIME = args.sleep_time
     if args.clean_slack:
         from slack import delete_all_bot_messages
         delete_all_bot_messages()
