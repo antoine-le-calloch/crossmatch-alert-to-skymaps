@@ -25,8 +25,8 @@ skyportal_url = os.getenv("SKYPORTAL_URL")
 skyportal_api_key = os.getenv("SKYPORTAL_API_KEY")
 boom_filters = os.getenv("BOOM_KAFKA_FILTERS").split(",")
 
-GCN = 48  # hours for GCN fallback
-FIRST_DETECTION = 24  # hours for first detection fallback
+GCN = 24*6  # hours for GCN fallback
+FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 
 config = {
