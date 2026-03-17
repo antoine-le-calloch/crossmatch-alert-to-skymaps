@@ -3,13 +3,20 @@ import time
 import argparse
 import traceback
 
-from datetime import datetime
-
 from astropy.time import Time
 from dotenv import load_dotenv
 from confluent_kafka import Consumer
 from api import SkyPortal, APIError
-from utils import get_skymaps, is_obj_in_skymaps, fallback, log, RED, ENDC, read_avro, get_snr
+from utils import (
+    get_filtered_photometry,
+    is_obj_in_skymaps,
+    get_skymaps,
+    read_avro,
+    fallback,
+    log,
+    RED,
+    ENDC
+)
 from gcn_notices import send_to_gcn, setup_telescope_list
 
 load_dotenv()
@@ -45,6 +52,7 @@ def crossmatch_alert_to_skymaps():
     setup_telescope_list(skyportal)
     cumulative_probability = 0.95
     snr_threshold = 5.0
+    processed_alerts = {}  # {objectId: {"skymaps": set((alias, dateobs)), "first_detection_jd": float}}
     skymaps = {}
     timer = None
 
@@ -57,7 +65,6 @@ def crossmatch_alert_to_skymaps():
 
     # Flags
     no_skymaps = False
-    jd_of_first_processed_alert = None
 
     while True:
         try:
@@ -99,6 +106,15 @@ def crossmatch_alert_to_skymaps():
                         log(f"Removed expired skymap {skymaps[event_id][0]}")
                         del skymaps[event_id]
 
+                # Clean up old objects from processed_alerts (first detection too old)
+                expired_objects = [
+                    obj_id for obj_id, info in processed_alerts.items()
+                    if info["first_detection_jd"] < fallback(FIRST_DETECTION, date_format="jd")
+                ]
+                for obj_id in expired_objects:
+                    log(f"Removed {obj_id} from processed alerts (first detection too old)")
+                    del processed_alerts[obj_id]
+
             # Consume new alerts passing a given filter from Boom Kafka and crossmatch with skymaps
             msg = consumer.poll(timeout=10.0)
             if msg is None:
@@ -107,52 +123,35 @@ def crossmatch_alert_to_skymaps():
                 log(f"Consumer error: {msg.error()}")
                 continue
 
-            if not jd_of_first_processed_alert:
-                jd_of_first_processed_alert = Time(datetime.utcnow()).jd
             if skymaps:
                 alert = read_avro(msg)
 
-
-                last_non_detection = []
-                filtered_photometry = []
-                too_old_object = False
-                for phot in reversed(alert.get("photometry", [])): # From the most recent to the oldest
-                    if phot["origin"] == "ForcedPhot":
-                        continue
                 if not any(filter.get("filter_name") in boom_filters for filter in alert.get("filters", [])):
                     continue
+                obj_id = alert["objectId"]
 
-                    snr = get_snr(phot)
-                    if snr: # If it's a detection
-                        last_non_detection = []  # Reset last non-detection as we found a detection
-                        filtered_photometry.append(phot)
-                        if snr >= snr_threshold and phot["jd"] < fallback(FIRST_DETECTION, date_format="jd"):
-                            too_old_object = True
-                            break
-                    elif not last_non_detection:
-                        last_non_detection = [phot]
+                filtered_photometry = get_filtered_photometry(alert, snr_threshold, fallback(FIRST_DETECTION, date_format="jd"))
+                if not filtered_photometry or len(filtered_photometry) < 2:
+                    continue # The First detection is too old or the alert doesn't have any non-detection
 
-                if too_old_object:
-                    # log(f"Object {alert['objectId']} is too old (at least one detection with SNR >= {snr_threshold} is older than {FIRST_DETECTION} hours). Skipping.")
-                    continue
+                # Only keep skymaps between last non-detection and first detection, excluding already processed ones
+                filtered_skymaps_tuples = [
+                    (dateobs, alias, moc) for dateobs, alias, moc in skymaps.values() if
+                    filtered_photometry[0]["jd"] <= Time(dateobs).jd <= filtered_photometry[1]["jd"] + 1  # add 1 day margin for updated localizations
+                    and (alias, dateobs) not in processed_alerts.get(obj_id, {}).get("skymaps", set())
+                ]
 
-                # Keep the last non-detection and all detections
-                filtered_photometry = last_non_detection + list(reversed(filtered_photometry))
-                # If the last photometry point (other than the last one which are the one who triggered the alert)
-                # have already been processed (i.e. its jd is after the first processed alert of this code)
-                # only keep new skymaps since the last processed alert
-                if len(filtered_photometry) > 2 and jd_of_first_processed_alert < filtered_photometry[-2]["jd"]:
-                    new_skymaps_tuples = [(dateobs, alias, moc) for dateobs, alias, moc in skymaps.values() if
-                               Time(dateobs).jd >= filtered_photometry[-2]["jd"]]
-                else:
-                    new_skymaps_tuples = list(skymaps.values())
-
-                matching_skymaps = is_obj_in_skymaps(alert["ra"], alert["dec"], new_skymaps_tuples)
+                matching_skymaps = is_obj_in_skymaps(alert["ra"], alert["dec"], filtered_skymaps_tuples)
                 if matching_skymaps:
-                    log(f"Alert {alert['objectId']} matches the following skymaps: {[alias for _, alias, _ in matching_skymaps]}")
-                    # Perform actions for each crossmatched alert
+                    # Process the crossmatch results here (e.g., send to GCN, log, etc.)
+                    log(f"{obj_id} matches the following skymaps: {[alias for _, alias, _ in matching_skymaps]}")
                     alert["filtered_photometry"] = filtered_photometry
                     send_to_gcn(alert, matching_skymaps, notify_slack=True)
+
+                    # Add the object and matching skymaps to processed_alerts to avoid re-processing
+                    processed_alerts.setdefault(obj_id, {
+                        "skymaps": set(), "first_detection_jd": filtered_photometry[1]["jd"]
+                    })["skymaps"].update((alias, dateobs) for dateobs, alias, _ in matching_skymaps)
 
             elif not no_skymaps:  # Only log once when no skymaps are available
                 log("No skymaps available. Waiting...")

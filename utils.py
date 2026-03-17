@@ -16,6 +16,7 @@ ENDC = "\033[0m"
 def log(message):
     print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
 
+
 def fallback(hours=0, seconds=0, date_format=None):
     date = datetime.utcnow() - timedelta(hours=hours, seconds=seconds)
     if date_format == "iso":
@@ -25,6 +26,7 @@ def fallback(hours=0, seconds=0, date_format=None):
     if date_format == "jd":
         return Time(date).jd
     return date
+
 
 def get_moc_from_fits(bytes, cumulative_probability):
     """Extract MOC from a FITS file containing a HEALPix skymap map.
@@ -108,6 +110,7 @@ def get_skymaps(skyportal, cumulative_probability, gcn_events):
 
     return results
 
+
 def is_obj_in_skymaps(ra, dec, skymaps):
     """
     Check if an object is within any of the provided skymaps (MOCs).
@@ -132,6 +135,7 @@ def is_obj_in_skymaps(ra, dec, skymaps):
     ]
     return matching_skymaps
 
+
 def read_avro(msg):
     """
     Reads an Avro record from a Kafka message.
@@ -149,7 +153,40 @@ def read_avro(msg):
         return record  # Return the first record found
     return None  # Return None if no records are found or if an error occurs
 
+
 def get_snr(phot):
   if phot["flux"] is None or not phot["flux_err"]:
       return None
   return phot["flux"] / phot["flux_err"]
+
+
+def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
+    """
+    Filter the photometry of an alert to keep only the last non-detection and all detections,
+    while also checking if the object is too old based on the SNR threshold and the first detection fallback.
+
+    Args:
+        alert (dict): The alert containing photometry data.
+        snr_threshold (float): The SNR threshold to consider an object as too old.
+        first_detection_fallback (float): The Julian Date fallback for the first detection
+    Returns:
+        list: A list of photometry points that includes the last non-detection and all detections, or None if too old.
+    """
+    last_non_detection = []
+    filtered_photometry = []
+    for phot in reversed(alert.get("photometry", [])):  # From the most recent to the oldest
+        if phot["origin"] == "ForcedPhot":
+            continue
+
+        snr = get_snr(phot)
+        if snr:  # If it's a detection
+            last_non_detection = []  # Reset last non-detection as we found a detection
+            filtered_photometry.append(phot)
+            if snr >= snr_threshold and phot["jd"] < first_detection_fallback:
+                # If at least one detection with SNR >= {snr_threshold} is older than first_detection_fallback, consider the object as too old and skip it
+                return None
+        elif not last_non_detection:
+            last_non_detection = [phot]
+
+    # Keep the last non-detection and all detections
+    return last_non_detection + list(reversed(filtered_photometry))
