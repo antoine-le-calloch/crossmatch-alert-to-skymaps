@@ -36,7 +36,7 @@ def prepare_gcn_payload(obj, matching_skymaps):
             ],
             "photometry": [{
                 "event_name": obj["objectId"],
-                "observation_start": Time(p["jd"], format="jd").iso,
+                "observation_start": Time(p["jd"], format="jd").iso, # TODO: need to figure out how many digit
                 "telescope": "Palomar 1.2m Oschin",
                 "instrument": "ZTF",
                 "filter": [p["band"]],
