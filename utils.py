@@ -187,14 +187,14 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     last_non_detection = []
     filtered_photometry = []
     for phot in reversed(alert.get("photometry", [])):  # From the most recent to the oldest
-        if phot["origin"] == "ForcedPhot":
+        if phot["origin"] == "ForcedPhot" or (phot["flux"] and phot["flux"] < 0):
             continue
 
         if phot["flux"] and phot["flux_err"]:  # If it's a detection
             last_non_detection = []  # Reset last non-detection as we found a detection
             filtered_photometry.append(phot)
             if phot["flux"] / phot["flux_err"] >= snr_threshold and phot["jd"] < first_detection_fallback:
-                # If at least one detection with SNR >= {snr_threshold} is older than first_detection_fallback, consider the object as too old and skip it
+                # If at least one detection with SNR >= snr_threshold is older than first_detection_fallback, consider the object as too old and skip it
                 return None
         elif not last_non_detection:
             last_non_detection = [phot]
