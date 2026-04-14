@@ -8,3 +8,5 @@ astropy_healpix
 confluent_kafka
 fastavro
 cramjam
+gcn_kafka
+jsonschema
