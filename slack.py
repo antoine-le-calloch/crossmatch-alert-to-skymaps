@@ -52,15 +52,15 @@ def send_to_slack(obj, matching_skymaps, gcn_payload):
             f"*Object:* <{skyportal_url}/source/{obj['objectId']}|{obj['objectId']}>\n"
             f"*GCN notice payload:*"
         ),
-        title= f"gcn_notice_payload_{obj['objectId']}_{'_'.join([skymap['alias'] for skymap in matching_skymaps.values()])}.json",
+        title= f"gcn_notice_payload_{obj['objectId']}_{'_'.join([skymap.alias for skymap in matching_skymaps.values()])}.json",
         file= io.BytesIO(json.dumps(gcn_payload, indent=2, ensure_ascii=False).encode("utf-8")),
     )
 
     for dateobs, skymap in matching_skymaps.items():
         client.files_upload_v2(
             channel=slack_channel_id,
-            filename=f"{obj['objectId']}_{skymap['alias']}.png",
-            initial_comment=f"*Alias:* <{skyportal_url}/gcn_events/{dateobs}|{skymap['alias']}>",
-            file=get_crossmatch_plot(obj, skymap["moc"]),
+            filename=f"{obj['objectId']}_{skymap.alias}.png",
+            initial_comment=f"*Alias:* <{skyportal_url}/gcn_events/{dateobs}|{skymap.alias}>",
+            file=get_crossmatch_plot(obj, skymap.moc),
         )
     time.sleep(1.5) # Wait for the files to be uploaded

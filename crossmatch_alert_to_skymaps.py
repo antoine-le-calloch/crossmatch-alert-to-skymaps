@@ -7,10 +7,9 @@ from astropy.time import Time
 from dotenv import load_dotenv
 from confluent_kafka import Consumer
 from api import SkyPortal, APIError
+from gcn_events import get_skymap
 from utils import (
     get_filtered_photometry,
-    is_obj_in_skymaps,
-    get_skymap,
     read_avro,
     fallback,
     log,
@@ -30,7 +29,7 @@ FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 
 config = {
-    'bootstrap.servers': os.getenv("BOOM_KAFKA_SERVERS"),
+    'bootstrap.servers': os.getenv("BOOM_KAFKA_SERVER"),
     'group.id': f'umn_boom_kafka_consumer_group_{int(time.time())}',
     'auto.offset.reset': 'earliest',
     "enable.auto.commit": False,
@@ -51,7 +50,7 @@ def crossmatch_alert_to_skymaps():
     cumulative_probability = 0.95
     snr_threshold = 5.0
     processed_alerts = {}  # {objectId: {"skymaps": set((dateobs,created_at)), "first_detection_jd": float}}
-    skymaps = {} # {dateobs: {"alias": str, "moc": MOC, "created_at": str}}
+    skymaps = {} # {dateobs: Skymap}
     timer = None
 
     # Subscribe to Boom Kafka topics
@@ -76,6 +75,9 @@ def crossmatch_alert_to_skymaps():
                 # Check for new GCN events or new localizations for existing events with "< 1000 sq. deg." tag
                 new_gcn_events = []
                 for event in skyportal.get_gcn_events(fallback(GCN)):
+                    if not event.get("aliases"):
+                        continue # Filter out GCN events without aliases
+
                     event["localization"] = next(
                         (loc for loc in event.get("localizations", [])
                          if any(tag["text"] == "< 1000 sq. deg." for tag in loc.get("tags", []))),
@@ -85,17 +87,12 @@ def crossmatch_alert_to_skymaps():
                         continue
                     elif event["dateobs"] not in skymaps:
                         new_gcn_events.append(event)
-                    elif skymaps[event["dateobs"]].get("created_at") < event["localization"]["created_at"]:
+                    elif skymaps[event["dateobs"]].created_at < event["localization"]["created_at"]:
                         # If the localization is newer than the one we have for that dateobs, we should recompute this event
                         new_gcn_events.append(event)
 
                 for gcn_event in new_gcn_events:
-                    moc = get_skymap(skyportal, cumulative_probability, gcn_event["localization"])
-                    skymaps[gcn_event["dateobs"]] = {
-                        "alias": gcn_event["aliases"][0] if gcn_event.get("aliases") else "No aliases",
-                        "moc": moc,
-                        "created_at": gcn_event["localization"]["created_at"],
-                    }
+                    skymaps[gcn_event["dateobs"]] = get_skymap(skyportal, cumulative_probability, gcn_event)
                 if new_gcn_events:
                     log(f"Fetching {len(new_gcn_events)} skymaps and creating MOCs")
 
@@ -131,25 +128,28 @@ def crossmatch_alert_to_skymaps():
                 if not filtered_photometry or len(filtered_photometry) < 2:
                     continue # The First detection is too old or the alert doesn't have any non-detection
 
-                filtered_skymaps = {}
+                matching_skymaps = {}
                 for dateobs, skymap in skymaps.items():
                     if not filtered_photometry[0]["jd"] <= Time(dateobs).jd <= filtered_photometry[1]["jd"]:
                         continue # Skymap is not between the last non-detection and the first detection
-                    if obj_id in processed_alerts and (dateobs, skymap["created_at"]) in processed_alerts[obj_id].get("skymaps", set()):
-                        log(f"Skipping already processed skymap {dateobs} for object {obj_id}")
-                    else:
-                        filtered_skymaps[dateobs] = skymap
 
-                matching_skymaps = is_obj_in_skymaps(alert["ra"], alert["dec"], filtered_skymaps)
+                    if obj_id in processed_alerts and (dateobs, skymap.created_at) in processed_alerts[obj_id].get("skymaps", set()):
+                        log(f"Skipping already processed skymap {dateobs} for object {obj_id}")
+                        continue # This skymap has already been processed for this object
+
+                    if skymap.contains(alert["ra"], alert["dec"]):
+                        # If the object is in the skymap, add it to the matching_skymaps dictionary
+                        matching_skymaps[dateobs] = skymap
+
                 if matching_skymaps:
                     # Process the crossmatch results here (e.g., send to GCN, log, etc.)
-                    skymaps_string = ", ".join([f"{skymap.get('alias')}/{skymap.get('created_at')}" for skymap in matching_skymaps.values()])
+                    skymaps_string = ", ".join(skymap.name for skymap in matching_skymaps.values())
                     log(f"{obj_id} matches the following skymaps: {skymaps_string}")
                     alert["filtered_photometry"] = filtered_photometry
                     send_to_gcn(alert, matching_skymaps, notify_slack=True)
 
                     # Add the object and matching skymaps to processed_alerts to avoid re-processing
-                    dateobs_created_at_tuple = set((dateobs, skymap["created_at"]) for dateobs, skymap in matching_skymaps.items())
+                    dateobs_created_at_tuple = set((dateobs, skymap.created_at) for dateobs, skymap in matching_skymaps.items())
                     if obj_id not in processed_alerts:
                         processed_alerts[obj_id] = {
                             "skymaps": dateobs_created_at_tuple,

@@ -1,20 +1,38 @@
 import io
+import math
 import fastavro
-import numpy as np
-import astropy.units as u
 
 from datetime import datetime, timedelta
 from astropy.time import Time
-from mocpy import MOC
-from astropy.io import fits
-from astropy_healpix import HEALPix
 
 RED = "\033[31m"
 YELLOW = "\033[33m"
 ENDC = "\033[0m"
 
+# BOOM stores ZTF flux as mag2flux(mag, 23.9) * 1e9 (see boom/src/alert/ztf.rs),
+# so the inverse uses an effective AB zero point of 23.9 + 2.5*log10(1e9) = 46.4.
+BOOM_ZTF_FLUX_ZP = 23.9 + 22.5
+_FACTOR = 2.5 / math.log(10)
+
+
 def log(message):
     print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} - {message}")
+
+
+def flux_to_mag(flux, zp=BOOM_ZTF_FLUX_ZP):
+    """Convert flux to AB magnitude."""
+    mag = -2.5 * math.log10(flux) + zp
+    return mag
+
+
+def flux_err_to_mag_error(flux, flux_err):
+    """Convert flux error to AB magnitude error."""
+    return _FACTOR * (flux_err / flux)
+
+
+def flux_err_to_limiting_mag(flux_err, zp=BOOM_ZTF_FLUX_ZP):
+    """5-sigma AB limiting magnitude from flux_err."""
+    return -2.5 * math.log10(5.0 * flux_err) + zp
 
 
 def fallback(hours=0, seconds=0, date_format=None):
@@ -45,104 +63,6 @@ def fallback(hours=0, seconds=0, date_format=None):
     if date_format == "jd":
         return Time(date).jd
     return date
-
-
-def get_moc_from_fits(bytes, cumulative_probability):
-    """Extract MOC from a FITS file containing a HEALPix skymap map.
-
-    Parameters
-    ----------
-    bytes : io.BytesIO
-        A BytesIO object containing the FITS file data.
-    cumulative_probability : float
-        The cumulative probability threshold for the MOC.
-    Returns
-    -------
-    moc : MOC
-        The MOC corresponding to the cumulative_probability threshold.
-    """
-    with fits.open(bytes) as hdul:
-        data = hdul[1].data
-        columns = [col.name for col in hdul[1].columns]
-        header = hdul[1].header
-
-    if "UNIQ" in columns:
-        # Multi-order format
-        uniq = data["UNIQ"]
-        probdensity = data["PROBDENSITY"]
-        orders = (np.log2(uniq // 4)) // 2
-        area = 4 * np.pi / np.array([MOC.n_cells(int(order)) for order in orders]) * u.sr
-        prob = probdensity * area
-    else:
-        # Flat HEALPix format
-        prob_col = next(c for c in columns if c in ("PROB", "PROBABILITY", "PROBDENSITY"))
-        prob = np.ravel(data[prob_col])
-        npix = len(prob)
-        nside = int(np.sqrt(npix / 12))
-        order = int(np.log2(nside))
-
-        # Convert from RING to NESTED ordering if needed (UNIQ scheme uses NESTED)
-        ordering = header.get("ORDERING", "NESTED").upper()
-        if ordering == "RING":
-            ring_hp = HEALPix(nside=nside, order="ring")
-            nested_hp = HEALPix(nside=nside, order="nested")
-            lon, lat = ring_hp.healpix_to_lonlat(np.arange(npix))
-            nested_indices = nested_hp.lonlat_to_healpix(lon, lat)
-            reordered = np.empty(npix)
-            reordered[nested_indices] = prob
-            prob = reordered
-
-        indices = np.arange(npix)
-        uniq = 4 * (4 ** order) + indices
-
-    return MOC.from_valued_healpix_cells(uniq, prob, 29, cumul_to=cumulative_probability)
-
-
-def get_skymap(skyportal, cumulative_probability, localization):
-    """Fetch the skymap for a given localization from the SkyPortal API
-    and extract the MOC corresponding to the cumulative_probability threshold.
-
-    Parameters
-    ----------
-    skyportal : SkyPortal
-        An instance of the SkyPortal API client.
-    cumulative_probability : float
-        The cumulative probability threshold for the MOC. Only tiles contributing
-        to this cumulative probability will be included in the MOC.
-    localization : dict
-        A dictionary containing the localization information.
-
-    Returns
-    -------
-    moc : MOC
-        The MOC corresponding to the cumulative_probability threshold for the given localization.
-    """
-    bytesIO_file = skyportal.download_localization(localization["dateobs"], localization["localization_name"])
-    return get_moc_from_fits(bytesIO_file, cumulative_probability)
-
-
-def is_obj_in_skymaps(ra, dec, skymaps):
-    """
-    Check if an object is within any of the provided skymaps (MOCs).
-
-    Parameters
-    ----------
-    ra : float
-        Right Ascension of the object in degrees.
-    dec : float
-        Declination of the object in degrees.
-    skymaps : dict
-        A dictionary where keys are dateobs and values are dictionaries containing 'alias' and 'moc' (MOC object).
-
-    Returns
-    -------
-    dict
-        A dictionary of skymaps where keys are dateobs and values are dictionaries containing 'alias' and 'moc' (MOC object).
-    """
-    return {
-        dateobs: skymap for dateobs, skymap in skymaps.items() if
-        skymap.get("moc").contains_lonlat(ra * u.deg, dec * u.deg)
-    }
 
 
 def read_avro(msg):
@@ -187,8 +107,8 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     last_non_detection = []
     filtered_photometry = []
     for phot in reversed(alert.get("photometry", [])):  # From the most recent to the oldest
-        if phot["origin"] == "ForcedPhot" or (phot["flux"] and phot["flux"] < 0):
-            continue
+        if phot["programid"] != 1 or phot["origin"] == "ForcedPhot" or (phot["flux"] and phot["flux"] < 0):
+            continue # Skip non-public ZTF alerts, forced photometry, and negative fluxes
 
         if phot["flux"] and phot["flux_err"]:  # If it's a detection
             last_non_detection = []  # Reset last non-detection as we found a detection

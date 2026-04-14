@@ -173,9 +173,10 @@ class SkyPortal:
         Get GCN events from SkyPortal filtered by dateobs and
         specific tags:
         - GW (any size)
+        - BNS (any size)
         - NSBH (any size)
-        - Fermi < 1000 sq. deg.
         - SVOM (any notice)
+        - Fermi (< 1000 sq. deg.)
 
         Parameters
         ----------
