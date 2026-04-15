@@ -5,12 +5,15 @@ import traceback
 
 from astropy.time import Time
 from dotenv import load_dotenv
+
+from gcn.produce_gcn_notices import produce_gcn_notice
 from utils.api import SkyPortal, APIError
 from utils.logger import log, RED, ENDC
 from utils.skymap import get_skymap
 from utils.kafka import read_avro, boom_consumer
 from utils.converter import fallback
-from utils.gcn import send_to_gcn
+from utils.gcn import prepare_gcn_payload
+from utils.slack import send_to_slack
 
 load_dotenv()
 
@@ -21,6 +24,14 @@ boom_filters = os.getenv("BOOM_KAFKA_FILTERS").split(",")
 GCN = 24*6  # hours for GCN fallback
 FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
+
+
+def send_to_gcn(obj, matching_skymaps, notify_slack=True):
+    gcn_payload = prepare_gcn_payload(obj, matching_skymaps)
+    produce_gcn_notice(gcn_payload)
+
+    if notify_slack:
+        send_to_slack(obj, matching_skymaps, gcn_payload)
 
 
 def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):

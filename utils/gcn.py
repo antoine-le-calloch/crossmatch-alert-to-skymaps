@@ -1,11 +1,12 @@
 import os
 
+from dotenv import load_dotenv
 from astropy.time import Time
 
-from gcn.produce_gcn_notices import produce_gcn_notice
-from utils.slack import send_to_slack
 from utils.logger import log, RED, YELLOW, GREEN, ENDC
 from utils.converter import flux_to_mag, flux_err_to_mag_error, flux_err_to_limiting_mag
+
+load_dotenv()
 
 SCHEMA = "https://gcn.nasa.gov/schema/v6.3.0/gcn/notices/boom/alert.schema.json"
 
@@ -65,11 +66,3 @@ def prepare_gcn_payload(obj, matching_skymaps):
         },
     }
     return payload
-
-
-def send_to_gcn(obj, matching_skymaps, notify_slack=True):
-    gcn_payload = prepare_gcn_payload(obj, matching_skymaps)
-    produce_gcn_notice(gcn_payload)
-
-    if notify_slack:
-        send_to_slack(obj, matching_skymaps, gcn_payload)

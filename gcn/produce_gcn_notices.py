@@ -7,6 +7,7 @@ from referencing import Registry, Resource
 
 from utils.gcn import CLIENT_ID, CLIENT_SECRET, DOMAIN, SCHEMA, TOPIC
 
+
 producer = Producer(
     client_id=CLIENT_ID,
     client_secret=CLIENT_SECRET,
