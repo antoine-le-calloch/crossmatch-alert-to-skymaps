@@ -3,12 +3,13 @@ import io
 import time
 import requests
 
-from utils import log, RED, YELLOW, ENDC
+from utils.logger import log, RED, YELLOW, ENDC
 
 SLOW_RESPONSE_THRESHOLD = 5  # seconds
 
 class APIError(Exception):
     pass
+
 
 def handle_timeout(method):
     """
@@ -38,6 +39,7 @@ def handle_timeout(method):
         except requests.exceptions.Timeout:
             raise APIError(f"{RED}Timeout error{ENDC} - SkyPortal API not responding to {YELLOW}{get_request_type(method.__name__, args)}{ENDC} request")
     return wrapper
+
 
 class SkyPortal:
     """

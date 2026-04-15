@@ -5,16 +5,15 @@ import time
 
 from dotenv import load_dotenv
 from slack_sdk import WebClient
-from datetime import datetime
-from plot_skymaps import get_crossmatch_plot
+from datetime import datetime, UTC
+
+from utils.skymap import plot_object_on_skymap
 
 load_dotenv()
 
 skyportal_url = os.getenv("SKYPORTAL_URL")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 slack_channel_name = os.getenv("SLACK_CHANNEL_NAME")
-
-client = WebClient(token=slack_bot_token)
 
 
 def get_channel_id(channel_name):
@@ -27,10 +26,6 @@ def get_channel_id(channel_name):
         if channel["name"] == channel_name:
             return channel["id"]
     return None
-
-slack_channel_id = get_channel_id(slack_channel_name)
-if not slack_channel_id:
-    exit("No slack channel found.")
 
 
 def delete_all_bot_messages():
@@ -48,7 +43,7 @@ def send_to_slack(obj, matching_skymaps, gcn_payload):
         channel=slack_channel_id,
         initial_comment=(
             f"*New object in Skymaps localization*\n"
-            f"*Date:* {datetime.utcnow().replace(microsecond=0).isoformat()} UTC\n"
+            f"*Date:* {datetime.now(UTC).replace(microsecond=0).isoformat()} UTC\n"
             f"*Object:* <{skyportal_url}/source/{obj['objectId']}|{obj['objectId']}>\n"
             f"*GCN notice payload:*"
         ),
@@ -61,6 +56,15 @@ def send_to_slack(obj, matching_skymaps, gcn_payload):
             channel=slack_channel_id,
             filename=f"{obj['objectId']}_{skymap.alias}.png",
             initial_comment=f"*Alias:* <{skyportal_url}/gcn_events/{dateobs}|{skymap.alias}>",
-            file=get_crossmatch_plot(obj, skymap.moc),
+            file=plot_object_on_skymap(obj, skymap.moc),
         )
     time.sleep(1.5) # Wait for the files to be uploaded
+
+
+if not slack_bot_token or not slack_channel_name:
+    exit("SLACK_BOT_TOKEN and SLACK_CHANNEL_NAME must be set in the environment variables.")
+
+client = WebClient(token=slack_bot_token)
+slack_channel_id = get_channel_id(slack_channel_name)
+if not slack_channel_id:
+    exit("No slack channel found.")
