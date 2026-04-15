@@ -5,18 +5,12 @@ import traceback
 
 from astropy.time import Time
 from dotenv import load_dotenv
-from confluent_kafka import Consumer
-from api import SkyPortal, APIError
-from gcn_events import get_skymap
-from utils import (
-    get_filtered_photometry,
-    read_avro,
-    fallback,
-    log,
-    RED,
-    ENDC
-)
-from gcn_notices import send_to_gcn, setup_telescope_list
+from utils.api import SkyPortal, APIError
+from utils.logger import log, RED, ENDC
+from utils.skymap import get_skymap
+from utils.kafka import read_avro, boom_consumer
+from utils.converter import fallback
+from utils.gcn import send_to_gcn
 
 load_dotenv()
 
@@ -28,36 +22,53 @@ GCN = 24*6  # hours for GCN fallback
 FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 
-config = {
-    'bootstrap.servers': os.getenv("BOOM_KAFKA_SERVER"),
-    'group.id': f'umn_boom_kafka_consumer_group_{int(time.time())}',
-    'auto.offset.reset': 'earliest',
-    "enable.auto.commit": False,
-}
-if os.getenv("BOOM_KAFKA_USERNAME") and os.getenv("BOOM_KAFKA_PASSWORD"):
-    config.update({
-        "security.protocol": "SASL_PLAINTEXT",
-        "sasl.mechanism": "SCRAM-SHA-512",
-        "sasl.username": os.getenv("BOOM_KAFKA_USERNAME"),
-        "sasl.password": os.getenv("BOOM_KAFKA_PASSWORD"),
-    })
-else:
-    config["security.protocol"] = "PLAINTEXT"
+
+def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
+    """
+    Filter the photometry of an alert to keep only the last non-detection and all detections,
+    while also checking if the object is too old based on the SNR threshold and the first detection fallback.
+
+    Parameters
+    ----------
+    alert : dict
+        The alert containing photometry data.
+    snr_threshold : float
+        The SNR threshold to consider an object as too old.
+    first_detection_fallback : float
+        The Julian Date fallback for the first detection
+    Returns
+    -------
+    list
+        A list of photometry points that includes the last non-detection and all detections, or None if too old.
+    """
+    last_non_detection = []
+    filtered_photometry = []
+    for phot in reversed(alert.get("photometry", [])):  # From the most recent to the oldest
+        if phot["programid"] != 1 or phot["origin"] == "ForcedPhot" or (phot["flux"] and phot["flux"] < 0):
+            continue # Skip non-public ZTF alerts, forced photometry, and negative fluxes
+
+        if phot["flux"] and phot["flux_err"]:  # If it's a detection
+            last_non_detection = []  # Reset last non-detection as we found a detection
+            filtered_photometry.append(phot)
+            if phot["flux"] / phot["flux_err"] >= snr_threshold and phot["jd"] < first_detection_fallback:
+                # If at least one detection with SNR >= snr_threshold is older than first_detection_fallback, consider the object as too old and skip it
+                return None
+        elif not last_non_detection:
+            last_non_detection = [phot]
+
+    # Keep the last non-detection and all detections
+    return last_non_detection + list(reversed(filtered_photometry))
+
 
 def crossmatch_alert_to_skymaps():
     skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
-    setup_telescope_list(skyportal)
     cumulative_probability = 0.95
     snr_threshold = 5.0
     processed_alerts = {}  # {objectId: {"skymaps": set((dateobs,created_at)), "first_detection_jd": float}}
     skymaps = {} # {dateobs: Skymap}
     timer = None
 
-    # Subscribe to Boom Kafka topics
-    consumer = Consumer(config)
-    topic = os.getenv("BOOM_KAFKA_TOPIC")
-    consumer.subscribe([topic])
-    log(f"Subscribed to topic: {topic}")
+    consumer = boom_consumer()
     log(f"Listening for alerts passing the following Boom filters: {boom_filters}")
 
     # Flags

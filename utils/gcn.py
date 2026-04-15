@@ -1,23 +1,33 @@
+import os
+
 from astropy.time import Time
 
-from slack import send_to_slack
+from gcn.produce_gcn_notices import produce_gcn_notice
+from utils.slack import send_to_slack
+from utils.logger import log, RED, YELLOW, GREEN, ENDC
+from utils.converter import flux_to_mag, flux_err_to_mag_error, flux_err_to_limiting_mag
 
-telescope_by_instrument_id = {}
+SCHEMA = "https://gcn.nasa.gov/schema/v6.3.0/gcn/notices/boom/alert.schema.json"
 
-def setup_telescope_list(skyportal):
-    global telescope_by_instrument_id
-    instruments = skyportal.get_instruments()
-    if not instruments:
-        raise ValueError("No instruments retrieved from SkyPortal.")
-    telescope_by_instrument_id = {
-        instrument["id"]: instrument["telescope"]["name"]
-        for instrument in instruments
-    }
+TESTING_MODE = os.getenv("GCN_KAFKA_TESTING_MODE", "true")
+if TESTING_MODE.lower() == "false":
+    log(f"{GREEN}GCN Kafka consumer is running in PRODUCTION MODE. Using production server and credentials.{ENDC}")
+    TESTING_MODE = False
+else:
+    if TESTING_MODE.lower() != "true":
+        log(f"{RED}Invalid value for GCN_KAFKA_TESTING_MODE: {TESTING_MODE}. Defaulting to TESTING MODE.{ENDC}")
+    log(f"{YELLOW}GCN Kafka consumer is running in TESTING MODE. Using test server and credentials.{ENDC}")
+    TESTING_MODE = True
+
+CLIENT_ID = os.getenv("GCN_KAFKA_USERNAME" if not TESTING_MODE else "GCN_KAFKA_TEST_USERNAME")
+CLIENT_SECRET = os.getenv("GCN_KAFKA_PASSWORD" if not TESTING_MODE else "GCN_KAFKA_TEST_PASSWORD")
+DOMAIN = os.getenv("GCN_KAFKA_SERVER" if not TESTING_MODE else "GCN_KAFKA_TEST_SERVER")
+TOPIC = os.getenv("GCN_KAFKA_TOPIC" if not TESTING_MODE else "GCN_KAFKA_TEST_TOPIC")
 
 
 def prepare_gcn_payload(obj, matching_skymaps):
     payload = {
-        '$schema': 'https://gcn.nasa.gov/schema/v6.3.0/gcn/notices/boom/alert.schema.json',
+        '$schema': SCHEMA,
         "alert_datetime": Time.now().isot + "Z",
         "mission": "Boom",
         "data": {
@@ -59,5 +69,7 @@ def prepare_gcn_payload(obj, matching_skymaps):
 
 def send_to_gcn(obj, matching_skymaps, notify_slack=True):
     gcn_payload = prepare_gcn_payload(obj, matching_skymaps)
+    produce_gcn_notice(gcn_payload)
+
     if notify_slack:
         send_to_slack(obj, matching_skymaps, gcn_payload)
