@@ -3,7 +3,7 @@ import json
 from gcn_kafka import Consumer
 
 from utils.gcn import CLIENT_ID, CLIENT_SECRET, DOMAIN, TOPIC
-from utils.logger import log
+from utils.logger import log, RED, ENDC
 
 
 def list_gcn_topics(topic_filter=None):
@@ -36,15 +36,16 @@ def gcn_notices_consumer(topics=None):
     while True:
         for message in consumer.consume(timeout=1):
             if message.error():
-                print(message.error())
+                log(f"{RED}{message.error()}{ENDC}")
                 continue
-            print(f'topic={message.topic()}, offset={message.offset()}')
+            log(f'topic={message.topic()}, offset={message.offset()}')
 
             try:
                 value = message.value().decode("utf-8")
                 data = json.loads(value)
                 print(json.dumps(data, indent=2))
+                print("\n----------------------------------\n")
 
             except Exception as e:
-                print("Failed to parse JSON:", e)
-                print(message.value())
+                log(f"{RED}Failed to parse JSON: {e}{ENDC}")
+                log(f"{RED}Raw message value: {message.value()}{ENDC}")
