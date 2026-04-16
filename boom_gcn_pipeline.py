@@ -75,7 +75,7 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     return last_non_detection + list(reversed(filtered_photometry))
 
 
-def crossmatch_alert_to_skymaps():
+def boom_gcn_pipeline():
     skyportal = SkyPortal(instance=SKYPORTAL_URL, token=SKYPORTAL_API_KEY)
     cumulative_probability = 0.95
     snr_threshold = 5.0
@@ -260,4 +260,4 @@ if __name__ == "__main__":
         if args.clean_slack:
             delete_all_bot_messages()
 
-    crossmatch_alert_to_skymaps()
+    boom_gcn_pipeline()
