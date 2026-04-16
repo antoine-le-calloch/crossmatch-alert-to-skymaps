@@ -47,13 +47,13 @@ def gcn_notices_consumer(topics=None, offset_reset='latest'):
             if message.error():
                 log(f"{RED}{message.error()}{ENDC}")
                 continue
+            print("\n----------------------------------\n")
             log(f'topic={message.topic()}, offset={message.offset()}')
 
             try:
                 value = message.value().decode("utf-8")
                 data = json.loads(value)
                 print(json.dumps(data, indent=2))
-                print("\n----------------------------------\n")
 
             except Exception as e:
                 log(f"{RED}Failed to parse JSON: {e}{ENDC}")
