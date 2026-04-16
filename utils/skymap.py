@@ -6,7 +6,9 @@ import matplotlib.pyplot as plt
 from mocpy import MOC
 from dataclasses import dataclass
 from astropy_healpix import HEALPix
-from astropy import wcs, io, visualization
+from astropy.wcs import WCS
+from astropy.io import fits
+from astropy.visualization.wcsaxes.frame import EllipticalFrame
 
 @dataclass
 class Skymap:
@@ -23,13 +25,13 @@ class Skymap:
     created_at : str
         The timestamp when the last localization was created, in ISO format (e.g., "2024-06-01T13:00:00Z").
     tags : list[str], optional
-        A list of tags associated with the event, such as "GW", "GRB", or "SVOM".
+        A list of tags associated with the event, such as "GW", "GRB", "SVOM" or "Einstein Probe"
     """
     dateobs: str
     alias: str
     moc: MOC
     created_at: str
-    tags: list[str] = None
+    tags: list[str]
 
     @property
     def name(self):
@@ -44,6 +46,8 @@ class Skymap:
                 return "GW"
             elif any(tag in ["GRB", "SVOM"] for tag in self.tags):
                 return "GRB"
+            elif "Einstein Probe" in self.tags:
+                return "XRay"
         return None
 
     @property
@@ -92,7 +96,7 @@ def get_moc_from_fits(bytes_io, cumulative_probability):
     cumulative_probability : float
         The cumulative probability threshold for the MOC.
     """
-    with io.fits.open(bytes_io) as hdul:
+    with fits.open(bytes_io) as hdul:
         data = hdul[1].data
         columns = [col.name for col in hdul[1].columns]
         header = hdul[1].header
@@ -143,7 +147,7 @@ def plot_object_on_skymap(obj, moc):
     bytes : BytesIO
         A BytesIO object containing the PNG image data.
     """
-    projection = wcs.WCS({
+    projection = WCS({
         "naxis": 2,
         "naxis1": 1620,
         "naxis2": 810,
@@ -158,7 +162,7 @@ def plot_object_on_skymap(obj, moc):
     })
 
     fig = plt.figure(figsize=(10, 5))
-    ax = fig.add_subplot(1, 1, 1, projection=projection, frame_class=visualization.wcsaxes.frame.EllipticalFrame)
+    ax = fig.add_subplot(1, 1, 1, projection=projection, frame_class=EllipticalFrame)
     moc.fill(ax=ax, wcs=projection, alpha=0.4, color="red")
     moc.border(ax=ax, wcs=projection, color="red")
     ax.grid()
