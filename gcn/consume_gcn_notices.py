@@ -14,7 +14,7 @@ def list_gcn_topics(topic_filter=None):
     )
     log(f"Listing available {topic_filter or ''} GCN topics:")
     for topic in consumer.list_topics().topics:
-        if topic_filter in topic:
+        if not topic_filter or topic_filter in topic:
             log(f"        {topic}")
     log("")
 
