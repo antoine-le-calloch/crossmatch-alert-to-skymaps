@@ -10,4 +10,5 @@ fastavro
 cramjam
 gcn_kafka
 jsonschema
+referencing
 matplotlib

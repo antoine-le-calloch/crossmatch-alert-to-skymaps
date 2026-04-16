@@ -47,6 +47,8 @@ class SkyPortal:
 
     Parameters
     ----------
+    instance : str
+        Base URL of the SkyPortal instance (e.g. https://fritz.science)
     port : int
         Port to use
     token : str
@@ -64,8 +66,8 @@ class SkyPortal:
 
     def __init__(self, instance, token, port=443, validate=True):
         # build the base URL from the instance and port
-        self.base_url = f'{instance}'
-        if port not in ['None', '', 80, 443]:
+        self.base_url = instance
+        if port and port not in (80, 443):
             self.base_url += f':{port}'
         
         self.headers = {'Authorization': f'token {token}'}

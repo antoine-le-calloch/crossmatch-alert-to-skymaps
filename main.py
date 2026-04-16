@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from gcn.produce_gcn_notices import produce_gcn_heartbeat, produce_to_gcn
 from utils.api import SkyPortal, APIError
-from utils.logger import log, RED, ENDC
+from utils.logger import log, RED, ENDC, YELLOW
 from utils.skymap import get_skymap
 from utils.kafka import read_avro, boom_consumer
 from utils.converter import fallback, str_to_bool
@@ -62,8 +62,12 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
         elif not last_non_detection:
             last_non_detection = [phot]
 
+    if not last_non_detection:
+        log(f"{YELLOW}Alert {alert['objectId']} does not have any non-detection before the first detection, skipping it.{ENDC}")
+        return None
+
     # Keep the last non-detection and all detections
-    return last_non_detection + list(reversed(filtered_photometry)) if last_non_detection else None
+    return last_non_detection + list(reversed(filtered_photometry))
 
 
 def crossmatch_alert_to_skymaps():
@@ -118,11 +122,13 @@ def crossmatch_alert_to_skymaps():
                 for gcn_event in new_gcn_events:
                     skymaps[gcn_event["dateobs"]] = get_skymap(skyportal, cumulative_probability, gcn_event)
                 if new_gcn_events:
-                    log(f"Fetching {len(new_gcn_events)} skymaps and creating MOCs")
+                    log(f"Fetched {len(new_gcn_events)} skymaps and created MOCs")
 
                 # Clean up old skymaps (GCN events older than fallback)
                 gcn_fallback_iso = fallback(GCN, date_format="iso")
                 for dateobs in list(skymaps.keys()):
+                    print(dateobs)
+                    print(gcn_fallback_iso)
                     if dateobs < gcn_fallback_iso:
                         log(f"Removed expired skymap {dateobs} from skymaps")
                         del skymaps[dateobs]
