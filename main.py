@@ -58,7 +58,7 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
         if phot["programid"] != 1 or phot["origin"] == "ForcedPhot" or not phot["flux_err"] or (phot["flux"] and phot["flux"] < 0):
             continue # Skip non-public ZTF alerts, forced photometry, no flux_err and negative fluxes
 
-        if phot["flux"] and phot["flux_err"]:  # If it's a detection
+        if phot["flux"]:  # If it's a detection
             last_non_detection = []  # Reset last non-detection as we found a detection
             filtered_photometry.append(phot)
             if phot["flux"] / phot["flux_err"] >= snr_threshold and phot["jd"] < first_detection_fallback:
@@ -77,13 +77,11 @@ def crossmatch_alert_to_skymaps():
     snr_threshold = 5.0
     processed_alerts = {}  # {objectId: {"skymaps": set((dateobs,created_at)), "first_detection_jd": float}}
     skymaps = {} # {dateobs: Skymap}
+    empty_poll = False
     timer = None
 
     consumer = boom_consumer()
     log(f"Listening for alerts passing the following Boom filters: {boom_filters}")
-
-    # Flags
-    no_skymaps = False
 
     while True:
         try:
@@ -136,10 +134,14 @@ def crossmatch_alert_to_skymaps():
             # Consume new alerts passing a set of filters from Boom Kafka and crossmatch them with available skymaps
             msg = consumer.poll(timeout=10.0)
             if msg is None:
+                if not empty_poll:
+                    log("No new alerts from Boom Kafka, waiting...")
+                    empty_poll = True
                 continue
             if msg.error():
                 log(f"Consumer error: {msg.error()}")
                 continue
+            empty_poll = False
 
             if skymaps:
                 alert = read_avro(msg)
@@ -181,13 +183,6 @@ def crossmatch_alert_to_skymaps():
                         }
                     else:
                         processed_alerts[obj_id]["skymaps"].update(dateobs_created_at_tuple)
-
-            elif not no_skymaps:  # Only log once when no skymaps are available
-                log("No skymaps available. Waiting...")
-                log("               .")
-                log("               .")
-                log("               .")
-                no_skymaps = True
 
         except APIError as e:
             log(e)

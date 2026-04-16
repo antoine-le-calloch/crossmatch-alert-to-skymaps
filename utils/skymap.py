@@ -24,7 +24,7 @@ class Skymap:
         The MOC object representing the last localization region for the event.
     created_at : str
         The timestamp when the last localization was created, in ISO format (e.g., "2024-06-01T13:00:00Z").
-    tags : list[str], optional
+    tags : list[str]
         A list of tags associated with the event, such as "GW", "GRB", "SVOM" or "Einstein Probe"
     """
     dateobs: str
