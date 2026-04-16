@@ -3,22 +3,18 @@ import os
 from dotenv import load_dotenv
 from astropy.time import Time
 
-from utils.logger import log, RED, YELLOW, GREEN, ENDC
-from utils.converter import flux_to_mag, flux_err_to_mag_error, flux_err_to_limiting_mag
+from utils.logger import log, YELLOW, GREEN, ENDC
+from utils.converter import flux_to_mag, flux_err_to_mag_error, flux_err_to_limiting_mag, str_to_bool
 
 load_dotenv()
 
 SCHEMA = "https://gcn.nasa.gov/schema/v6.3.0/gcn/notices/boom/alert.schema.json"
 
-TESTING_MODE = os.getenv("GCN_KAFKA_TESTING_MODE", "true")
-if TESTING_MODE.lower() == "false":
-    log(f"{GREEN}GCN Kafka is running in PRODUCTION MODE using production server and credentials.{ENDC}")
-    TESTING_MODE = False
-else:
-    if TESTING_MODE.lower() != "true":
-        log(f"{RED}Invalid value for GCN_KAFKA_TESTING_MODE: {TESTING_MODE}. Defaulting to TESTING MODE.{ENDC}")
+TESTING_MODE = str_to_bool(os.getenv("GCN_KAFKA_TESTING_MODE"), default=True)
+if TESTING_MODE:
     log(f"{YELLOW}GCN Kafka is running in TESTING MODE using test server and credentials.{ENDC}")
-    TESTING_MODE = True
+else:
+    log(f"{GREEN}GCN Kafka is running in PRODUCTION MODE using production server and credentials.{ENDC}")
 
 CLIENT_ID = os.getenv("GCN_KAFKA_USERNAME" if not TESTING_MODE else "GCN_KAFKA_TEST_USERNAME")
 CLIENT_SECRET = os.getenv("GCN_KAFKA_PASSWORD" if not TESTING_MODE else "GCN_KAFKA_TEST_PASSWORD")

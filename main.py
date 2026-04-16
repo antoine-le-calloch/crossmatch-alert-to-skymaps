@@ -6,33 +6,26 @@ import traceback
 from astropy.time import Time
 from dotenv import load_dotenv
 
-from gcn.produce_gcn_notices import produce_gcn_notice, produce_gcn_heartbeat
+from gcn.produce_gcn_notices import produce_gcn_heartbeat, produce_to_gcn
 from utils.api import SkyPortal, APIError
 from utils.logger import log, RED, ENDC
 from utils.skymap import get_skymap
 from utils.kafka import read_avro, boom_consumer
-from utils.converter import fallback
+from utils.converter import fallback, str_to_bool
 from utils.gcn import prepare_gcn_payload
 from utils.slack import send_to_slack
 
 load_dotenv()
 
-skyportal_url = os.getenv("SKYPORTAL_URL")
-skyportal_api_key = os.getenv("SKYPORTAL_API_KEY")
-boom_filters = os.getenv("BOOM_KAFKA_FILTERS").split(",")
+SKYPORTAL_URL = os.getenv("SKYPORTAL_URL")
+SKYPORTAL_API_KEY = os.getenv("SKYPORTAL_API_KEY")
+BOOM_FILTERS = os.getenv("BOOM_KAFKA_FILTERS").split(",")
+NOTIFY_SLACK = str_to_bool(os.getenv("NOTIFY_SLACK"), default=False)
 
 GCN = 24*6  # hours for GCN fallback
 FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 HEARTBEAT_INTERVAL = 120 # seconds between each heartbeat log
-
-
-def send_to_gcn(obj, matching_skymaps, notify_slack=True):
-    gcn_payload = prepare_gcn_payload(obj, matching_skymaps)
-    produce_gcn_notice(gcn_payload)
-
-    if notify_slack:
-        send_to_slack(obj, matching_skymaps, gcn_payload)
 
 
 def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
@@ -74,7 +67,7 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
 
 
 def crossmatch_alert_to_skymaps():
-    skyportal = SkyPortal(instance=skyportal_url, token=skyportal_api_key)
+    skyportal = SkyPortal(instance=SKYPORTAL_URL, token=SKYPORTAL_API_KEY)
     cumulative_probability = 0.95
     snr_threshold = 5.0
     processed_alerts = {}  # {objectId: {"skymaps": set((dateobs,created_at)), "first_detection_jd": float}}
@@ -85,7 +78,7 @@ def crossmatch_alert_to_skymaps():
     log_empty_poll = True
 
     consumer = boom_consumer()
-    log(f"Listening for alerts passing the following Boom filters: {boom_filters}")
+    log(f"Listening for alerts passing the following Boom filters: {BOOM_FILTERS}")
 
     while True:
         if time.time() - heartbeat_timer >= HEARTBEAT_INTERVAL:
@@ -155,7 +148,7 @@ def crossmatch_alert_to_skymaps():
             if skymaps:
                 alert = read_avro(msg)
 
-                if not any(filter.get("filter_name") in boom_filters for filter in alert.get("filters", [])):
+                if not any(filter.get("filter_name") in BOOM_FILTERS for filter in alert.get("filters", [])):
                     continue
                 obj_id = alert["objectId"]
 
@@ -181,7 +174,13 @@ def crossmatch_alert_to_skymaps():
                     skymaps_string = ", ".join(skymap.name for skymap in matching_skymaps.values())
                     log(f"{obj_id} matches the following skymaps: {skymaps_string}")
                     alert["filtered_photometry"] = filtered_photometry
-                    send_to_gcn(alert, matching_skymaps, notify_slack=True)
+
+                    # Publish the GCN notice with the alert data and matching skymaps to the GCN Kafka topic
+                    gcn_payload = prepare_gcn_payload(alert, matching_skymaps)
+                    produce_to_gcn(gcn_payload)
+
+                    if NOTIFY_SLACK:
+                        send_to_slack(alert, matching_skymaps, gcn_payload)
 
                     # Add the object and matching skymaps to processed_alerts to avoid re-processing
                     dateobs_created_at_tuple = set((dateobs, skymap.created_at) for dateobs, skymap in matching_skymaps.items())
@@ -198,6 +197,7 @@ def crossmatch_alert_to_skymaps():
         except Exception:
             log(f"{RED}An error occurred:{ENDC}")
             traceback.print_exc()
+
 
 if __name__ == "__main__":
     # --- CLI arguments ---
@@ -236,8 +236,12 @@ if __name__ == "__main__":
     GCN = args.gcn
     FIRST_DETECTION = args.detection
     SLEEP_TIME = args.sleep_time
-    if args.clean_slack:
-        from utils.slack import delete_all_bot_messages
-        delete_all_bot_messages()
+
+    if NOTIFY_SLACK:
+        from utils.slack import init_slack, delete_all_bot_messages
+        init_slack()
+
+        if args.clean_slack:
+            delete_all_bot_messages()
 
     crossmatch_alert_to_skymaps()

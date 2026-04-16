@@ -15,6 +15,9 @@ skyportal_url = os.getenv("SKYPORTAL_URL")
 slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 slack_channel_name = os.getenv("SLACK_CHANNEL_NAME")
 
+client = None
+slack_channel_id = None
+
 
 def get_channel_id(channel_name):
     """Get the Slack channel ID for the specified channel name."""
@@ -35,6 +38,16 @@ def delete_all_bot_messages():
         if message.get("bot_id"):
             client.chat_delete(channel=slack_channel_id, ts=message["ts"])
             time.sleep(1.3) # To avoid hitting rate limits
+
+
+def init_slack():
+    global client, slack_channel_id
+    if not slack_bot_token or not slack_channel_name:
+        raise RuntimeError("SLACK_BOT_TOKEN and SLACK_CHANNEL_NAME must be set.")
+    client = WebClient(token=slack_bot_token)
+    slack_channel_id = get_channel_id(slack_channel_name)
+    if not slack_channel_id:
+        raise RuntimeError(f"Slack channel '{slack_channel_name}' not found.")
 
 
 def send_to_slack(obj, matching_skymaps, gcn_payload):
@@ -58,12 +71,3 @@ def send_to_slack(obj, matching_skymaps, gcn_payload):
             initial_comment=f"*Alias:* <{skyportal_url}/gcn_events/{dateobs}|{skymap.alias}>",
             file=plot_object_on_skymap(obj, skymap.moc),
         )
-
-
-if not slack_bot_token or not slack_channel_name:
-    exit("SLACK_BOT_TOKEN and SLACK_CHANNEL_NAME must be set in the environment variables.")
-
-client = WebClient(token=slack_bot_token)
-slack_channel_id = get_channel_id(slack_channel_name)
-if not slack_channel_id:
-    exit("No slack channel found.")

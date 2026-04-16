@@ -52,3 +52,46 @@ def fallback(hours=0, seconds=0, date_format=None):
     if date_format == "jd":
         return Time(date).jd
     return date
+
+
+def str_to_bool(value, default=None):
+    """
+    Convert a string to a boolean value.
+
+    Accepts various string representations:
+        - "yes", "y", "TRUE", "True", "true", "t", "1" => True
+        - "no", "n", "FALSE", "False", "false", "f", "0" => False
+
+    If the value is None, empty, or invalid:
+        - returns the default if provided
+        - raises ValueError otherwise
+
+    Parameters
+    ----------
+    value : str
+        The string to convert to a boolean.
+    default : bool, optional
+        Value to return if the input is missing or invalid.
+
+    Returns
+    -------
+    bool
+        The converted boolean value.
+
+    Raises
+    -------
+    ValueError
+        If the value is invalid and no default is provided.
+    """
+    try:
+        value_str = str(value).strip().lower()
+        if value_str in ("yes", "y", "true", "t", "1"):
+            return True
+        if value_str in ("no", "n", "false", "f", "0"):
+            return False
+    except Exception:
+        pass  # ignore any conversion error
+
+    if default is not None:
+        return default
+    raise ValueError(f"Invalid string value for boolean conversion: {value}")
