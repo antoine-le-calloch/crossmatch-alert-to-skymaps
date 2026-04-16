@@ -75,7 +75,7 @@ def get_skymap(skyportal, cumulative_probability, event):
     moc = get_moc_from_fits(bytes_io, cumulative_probability)
     return Skymap(
         dateobs=event["dateobs"],
-        alias=next((a for a in event["aliases"] if "#" in a)), # Use the first alias that contains "#"
+        alias=next((a for a in event["aliases"] if "#" in a), "No aliases"), # Use the first alias that contains "#"
         moc=moc,
         created_at=localization["created_at"],
         tags=event.get("tags", [])
