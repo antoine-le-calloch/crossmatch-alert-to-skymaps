@@ -1,9 +1,10 @@
-<div align="center">
-<h1>Boom Gcn Pipeline</h1>
-<img src="logo/skyportal.png" alt="SkyPortal Logo" width="100px"/>
-<img src="logo/boom.png" alt="BOOM logo" width="100px"/>
-</div>
-
+<h1>
+    <img src="logo/nasa.png" alt="SkyPortal Logo" width="80px" align="right"/>
+    <img src="logo/skyportal.png" alt="SkyPortal Logo" width="80px" align="right"/>
+    <img src="logo/boom.png" alt="BOOM logo" width="80px" align="right"/>
+    <br/><br/>
+    Boom Gcn Pipeline
+</h1>
 
 A Python service that consumes alerts from the [BOOM/Babamul](https://babamul.caltech.edu/) broker, crossmatches them with recent GCN skymaps, and republishes the matches as BOOM GCN Notices.
 
