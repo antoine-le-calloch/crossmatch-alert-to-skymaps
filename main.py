@@ -98,6 +98,8 @@ def crossmatch_alert_to_skymaps():
                 new_gcn_events = []
                 for event in skyportal.get_gcn_events(fallback(GCN)):
                     if not event.get("aliases") or not any("#" in alias for alias in event["aliases"]):
+                        if event.get("aliases"):
+                            log(f"Skipping GCN event {event['dateobs']} due to bad aliases: {event['aliases']}")
                         continue # Filter out GCN events with bad or no aliases
 
                     event["localization"] = next(
