@@ -178,6 +178,7 @@ class SkyPortal:
         - BNS (any size)
         - NSBH (any size)
         - SVOM (any notice)
+        - Einstein Probe (any notice)
         - Fermi (< 1000 sq. deg.)
 
         Parameters
@@ -195,12 +196,12 @@ class SkyPortal:
             "excludeNoticeContent": True,
         }
 
-        # Get GCN events with GW, BNS, NSBH or SVOM and without BBH, MLy or Terrestrial tags.
+        # Get GCN events with GW, BNS, NSBH, SVOM or Einstein Probe and without BBH, MLy or Terrestrial tags.
         gcn_events = self.fetch_all_pages(
             "/api/gcn_event",
             {
                 **payload,
-                "gcnTagKeep":"GW,BNS,NSBH,SVOM",
+                "gcnTagKeep":"GW,BNS,NSBH,SVOM,Einstein Probe",
                 "gcnTagRemove": "BBH,MLy,Terrestrial"
             },
             "events"
