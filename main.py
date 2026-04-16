@@ -50,8 +50,9 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
         The Julian Date fallback for the first detection
     Returns
     -------
-    list
-        A list of photometry points that includes the last non-detection and all detections, or None if too old.
+    list or None
+        A list of photometry points that includes the last non-detection and all detections,
+        or None if too old or if there are no non-detections.
     """
     last_non_detection = []
     filtered_photometry = []
@@ -69,7 +70,7 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
             last_non_detection = [phot]
 
     # Keep the last non-detection and all detections
-    return last_non_detection + list(reversed(filtered_photometry))
+    return last_non_detection + list(reversed(filtered_photometry)) if last_non_detection else None
 
 
 def crossmatch_alert_to_skymaps():
