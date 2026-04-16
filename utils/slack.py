@@ -58,7 +58,6 @@ def send_to_slack(obj, matching_skymaps, gcn_payload):
             initial_comment=f"*Alias:* <{skyportal_url}/gcn_events/{dateobs}|{skymap.alias}>",
             file=plot_object_on_skymap(obj, skymap.moc),
         )
-    time.sleep(1.5) # Wait for the files to be uploaded
 
 
 if not slack_bot_token or not slack_channel_name:
