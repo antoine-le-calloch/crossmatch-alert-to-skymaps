@@ -47,4 +47,4 @@ def produce_gcn_heartbeat():
         "timestamp": Time.now().isot + "Z",
         "status": "alive"
     }
-    produce_to_gcn(HEARTBEAT_TOPIC, heartbeat_payload, validate=False)
+    produce_to_gcn(heartbeat_payload, topic=HEARTBEAT_TOPIC, validate=False)
