@@ -2,8 +2,8 @@ import json
 
 from gcn_kafka import Consumer
 
-from utils.gcn import CLIENT_ID, CLIENT_SECRET, DOMAIN, TOPIC
-from utils.logger import log, RED, ENDC
+from utils.gcn import CLIENT_ID, CLIENT_SECRET, DOMAIN, TOPIC, HEARTBEAT_TOPIC
+from utils.logger import log, RED, YELLOW, ENDC
 
 
 def list_gcn_topics(topic_filter=None):
@@ -30,7 +30,17 @@ def gcn_notices_consumer(topics=None):
         config=gcn_notices_config
     )
 
-    topics = topics or [TOPIC]
+    if topics is None:
+        topic_list = consumer.list_topics().topics
+        if not any(topic == TOPIC for topic in topic_list):
+            log(f"{RED}Error: topic '{TOPIC}' not found in available topics. Please check your configuration.{ENDC}")
+            return
+        if not any(topic == HEARTBEAT_TOPIC for topic in topic_list):
+            log(f"{YELLOW}Heartbeat topic '{HEARTBEAT_TOPIC}' not found in available topics.{ENDC}")
+            topics = [TOPIC]
+        else:
+            topics = [TOPIC, HEARTBEAT_TOPIC]
+
     consumer.subscribe(topics)
     log(f"Subscribed to topic: {topics}")
     while True:

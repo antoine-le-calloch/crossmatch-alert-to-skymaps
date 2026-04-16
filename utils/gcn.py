@@ -12,18 +12,19 @@ SCHEMA = "https://gcn.nasa.gov/schema/v6.3.0/gcn/notices/boom/alert.schema.json"
 
 TESTING_MODE = os.getenv("GCN_KAFKA_TESTING_MODE", "true")
 if TESTING_MODE.lower() == "false":
-    log(f"{GREEN}GCN Kafka consumer is running in PRODUCTION MODE. Using production server and credentials.{ENDC}")
+    log(f"{GREEN}GCN Kafka is running in PRODUCTION MODE using production server and credentials.{ENDC}")
     TESTING_MODE = False
 else:
     if TESTING_MODE.lower() != "true":
         log(f"{RED}Invalid value for GCN_KAFKA_TESTING_MODE: {TESTING_MODE}. Defaulting to TESTING MODE.{ENDC}")
-    log(f"{YELLOW}GCN Kafka consumer is running in TESTING MODE. Using test server and credentials.{ENDC}")
+    log(f"{YELLOW}GCN Kafka is running in TESTING MODE using test server and credentials.{ENDC}")
     TESTING_MODE = True
 
 CLIENT_ID = os.getenv("GCN_KAFKA_USERNAME" if not TESTING_MODE else "GCN_KAFKA_TEST_USERNAME")
 CLIENT_SECRET = os.getenv("GCN_KAFKA_PASSWORD" if not TESTING_MODE else "GCN_KAFKA_TEST_PASSWORD")
 DOMAIN = os.getenv("GCN_KAFKA_SERVER" if not TESTING_MODE else "GCN_KAFKA_TEST_SERVER")
 TOPIC = os.getenv("GCN_KAFKA_TOPIC" if not TESTING_MODE else "GCN_KAFKA_TEST_TOPIC")
+HEARTBEAT_TOPIC = f"{TOPIC}.heartbeat"
 
 
 def prepare_gcn_payload(obj, matching_skymaps):

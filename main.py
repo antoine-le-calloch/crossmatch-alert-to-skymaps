@@ -6,7 +6,7 @@ import traceback
 from astropy.time import Time
 from dotenv import load_dotenv
 
-from gcn.produce_gcn_notices import produce_gcn_notice
+from gcn.produce_gcn_notices import produce_gcn_notice, produce_gcn_heartbeat
 from utils.api import SkyPortal, APIError
 from utils.logger import log, RED, ENDC
 from utils.skymap import get_skymap
@@ -24,6 +24,7 @@ boom_filters = os.getenv("BOOM_KAFKA_FILTERS").split(",")
 GCN = 24*6  # hours for GCN fallback
 FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
+HEARTBEAT_INTERVAL = 120 # seconds between each heartbeat log
 
 
 def send_to_gcn(obj, matching_skymaps, notify_slack=True):
@@ -77,17 +78,24 @@ def crossmatch_alert_to_skymaps():
     snr_threshold = 5.0
     processed_alerts = {}  # {objectId: {"skymaps": set((dateobs,created_at)), "first_detection_jd": float}}
     skymaps = {} # {dateobs: Skymap}
-    empty_poll = False
-    timer = None
+
+    check_for_gcn_events_timer = None
+    heartbeat_timer = time.time()
+    log_empty_poll = True
 
     consumer = boom_consumer()
     log(f"Listening for alerts passing the following Boom filters: {boom_filters}")
 
     while True:
+        if time.time() - heartbeat_timer >= HEARTBEAT_INTERVAL:
+            heartbeat_timer = time.time()
+            produce_gcn_heartbeat()
+            log_empty_poll = True
+
         try:
             # only check that every SLEEP_TIME seconds to avoid hitting the API
-            if not timer or time.time() - timer >= SLEEP_TIME:
-                timer = time.time() # reset timer
+            if not check_for_gcn_events_timer or time.time() - check_for_gcn_events_timer >= SLEEP_TIME:
+                check_for_gcn_events_timer = time.time() # reset timer
 
                 # Check if SkyPortal is available
                 skyportal.ping()
@@ -134,14 +142,14 @@ def crossmatch_alert_to_skymaps():
             # Consume new alerts passing a set of filters from Boom Kafka and crossmatch them with available skymaps
             msg = consumer.poll(timeout=10.0)
             if msg is None:
-                if not empty_poll:
+                if log_empty_poll:
                     log("No new alerts from Boom Kafka, waiting...")
-                    empty_poll = True
+                    log_empty_poll = False
                 continue
             if msg.error():
                 log(f"Consumer error: {msg.error()}")
                 continue
-            empty_poll = False
+            log_empty_poll = True
 
             if skymaps:
                 alert = read_avro(msg)
