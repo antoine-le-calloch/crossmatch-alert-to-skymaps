@@ -21,14 +21,19 @@ slack_channel_id = None
 
 def get_channel_id(channel_name):
     """Get the Slack channel ID for the specified channel name."""
-    channels = (
-            client.conversations_list().get("channels", []) +
-            client.conversations_list(types="private_channel").get("channels", [])
-    )
-    for channel in channels:
-        if channel["name"] == channel_name:
-            return channel["id"]
-    return None
+    cursor = None
+    while True:
+        response = client.conversations_list(
+            types="public_channel,private_channel",
+            limit=200,
+            cursor=cursor,
+        )
+        for channel in response.get("channels", []):
+            if channel["name"] == channel_name:
+                return channel["id"]
+        cursor = response.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            return None
 
 
 def delete_all_bot_messages():
