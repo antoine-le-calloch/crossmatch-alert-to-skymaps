@@ -109,7 +109,7 @@ def get_moc_from_fits(bytes_io, cumulative_probability):
         uniq = data["UNIQ"]
         probdensity = data["PROBDENSITY"]
         orders = (np.log2(uniq // 4)) // 2
-        area = 4 * np.pi / np.array([MOC.n_cells(int(order)) for order in orders]) * u.sr
+        area = np.pi / (3 * 4**orders) * u.sr
         prob = probdensity * area
     else:
         prob_col = next(c for c in columns if c in ("PROB", "PROBABILITY", "PROBDENSITY"))
