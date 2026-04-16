@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
 from mocpy import MOC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from astropy.time import Time
 from astropy_healpix import HEALPix
 from astropy.wcs import WCS
 from astropy.io import fits
@@ -30,12 +31,19 @@ class Skymap:
         The timestamp when the last localization was created, in ISO format (e.g., "2024-06-01T13:00:00Z").
     tags : list[str]
         A list of tags associated with the event, such as "GW", "GRB", "SVOM" or "Einstein Probe"
+    jd : float
+        The Julian Date corresponding to dateobs.
     """
     dateobs: str
     alias: str
     moc: MOC
     created_at: str
     tags: list[str]
+    jd: float = field(init=False)
+
+    def __post_init__(self):
+        """Calculate the Julian Date from dateobs after initialization."""
+        self.jd = Time(self.dateobs).jd
 
     @property
     def name(self):

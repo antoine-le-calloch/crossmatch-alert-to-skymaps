@@ -3,7 +3,6 @@ import time
 import argparse
 import traceback
 
-from astropy.time import Time
 from dotenv import load_dotenv
 
 from gcn.produce_gcn_notices import produce_gcn_heartbeat, produce_to_gcn
@@ -175,7 +174,7 @@ def crossmatch_alert_to_skymaps():
 
                 matching_skymaps = {}
                 for dateobs, skymap in skymaps.items():
-                    if not filtered_photometry[0]["jd"] <= Time(dateobs).jd <= filtered_photometry[1]["jd"]:
+                    if not filtered_photometry[0]["jd"] <= skymap.jd <= filtered_photometry[1]["jd"]:
                         continue # Skymap is not between the last non-detection and the first detection
 
                     if obj_id in published_matches and (dateobs, skymap.created_at) in published_matches[obj_id].get("skymaps", set()):
