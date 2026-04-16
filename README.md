@@ -6,7 +6,7 @@
     Boom Gcn Pipeline
 </h1>
 
-A Python service that consumes alerts from the [BOOM/Babamul](https://babamul.caltech.edu/) broker, crossmatches them with recent GCN skymaps, and republishes the matches as BOOM GCN Notices.
+A Python service that consumes alerts from the [BOOM/Babamul](https://babamul.caltech.edu/) broker, crossmatches them with recent GCN skymaps from [SkyPortal](https://skyportal.io/), and republishes the matches as [BOOM GCN Notices](https://gcn.nasa.gov/notices).
 
 ## About BOOM
 
