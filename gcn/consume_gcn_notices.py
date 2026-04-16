@@ -19,15 +19,14 @@ def list_gcn_topics(topic_filter=None):
     log("")
 
 
-def gcn_notices_consumer(topics=None):
-    gcn_notices_config = {
-        'auto.offset.reset': 'earliest'
-    }
+def gcn_notices_consumer(topics=None, offset_reset='latest'):
     consumer = Consumer(
         client_id=CLIENT_ID,
         client_secret=CLIENT_SECRET,
         domain=DOMAIN,
-        config=gcn_notices_config
+        config={
+            'auto.offset.reset': offset_reset
+        }
     )
 
     if topics is None:
