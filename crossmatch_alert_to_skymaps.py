@@ -127,8 +127,6 @@ def crossmatch_alert_to_skymaps():
                 # Clean up old skymaps (GCN events older than fallback)
                 gcn_fallback_iso = fallback(GCN, date_format="iso")
                 for dateobs in list(skymaps.keys()):
-                    print(dateobs)
-                    print(gcn_fallback_iso)
                     if dateobs < gcn_fallback_iso:
                         log(f"Removed expired skymap {dateobs} from skymaps")
                         del skymaps[dateobs]
