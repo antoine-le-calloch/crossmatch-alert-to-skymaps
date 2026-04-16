@@ -10,3 +10,4 @@ fastavro
 cramjam
 gcn_kafka
 jsonschema
+matplotlib
