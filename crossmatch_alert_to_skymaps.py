@@ -164,7 +164,7 @@ def crossmatch_alert_to_skymaps():
             if skymaps:
                 alert = read_avro(msg)
 
-                if not any(filter.get("filter_name") in BOOM_FILTERS for filter in alert.get("filters", [])):
+                if not any(boom_filter.get("filter_name") in BOOM_FILTERS for boom_filter in alert.get("filters", [])):
                     continue
                 obj_id = alert["objectId"]
                 new_processed_alerts += 1
