@@ -97,8 +97,8 @@ def crossmatch_alert_to_skymaps():
                 # Check for new GCN events or new localizations for existing events with "< 1000 sq. deg." tag
                 new_gcn_events = []
                 for event in skyportal.get_gcn_events(fallback(GCN)):
-                    if not event.get("aliases"):
-                        continue # Filter out GCN events without aliases
+                    if not event.get("aliases") or not any("#" in alias for alias in event["aliases"]):
+                        continue # Filter out GCN events with bad or no aliases
 
                     event["localization"] = next(
                         (loc for loc in event.get("localizations", [])
