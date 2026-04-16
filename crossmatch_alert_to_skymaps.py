@@ -50,8 +50,11 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     last_non_detection = []
     filtered_photometry = []
     for phot in reversed(alert.get("photometry", [])):  # From the most recent to the oldest
-        if phot["programid"] != 1 or phot["origin"] == "ForcedPhot" or not phot["flux_err"] or (phot["flux"] and phot["flux"] < 0):
-            continue # Skip non-public ZTF alerts, forced photometry, no flux_err and negative fluxes
+        if phot["programid"] != 1:
+            log(f"{RED}{alert['objectId']} has non-public photometry point, skipping it.{ENDC}")
+            continue
+        if phot["origin"] == "ForcedPhot" or not phot["flux_err"] or (phot["flux"] and phot["flux"] < 0):
+            continue # Skip forced photometry, no flux_err and negative fluxes
 
         if phot["flux"]:  # If it's a detection
             last_non_detection = []  # Reset last non-detection as we found a detection
