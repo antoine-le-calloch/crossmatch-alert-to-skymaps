@@ -20,6 +20,16 @@ def list_gcn_topics(topic_filter=None):
 
 
 def gcn_notices_consumer(topics=None, offset_reset='latest'):
+    """
+    Consume GCN notices from specified topics and print them in a human-readable format.
+
+    Parameters
+    ----------
+    topics : list of str, optional
+        List of topics to subscribe to. If None, defaults to [TOPIC, HEARTBEAT_TOPIC].
+    offset_reset : str, optional
+        Offset reset policy for the consumer. Defaults to 'latest'. Other options include 'earliest' and 'none'.
+    """
     consumer = Consumer(
         client_id=CLIENT_ID,
         client_secret=CLIENT_SECRET,
@@ -29,19 +39,16 @@ def gcn_notices_consumer(topics=None, offset_reset='latest'):
         }
     )
 
-    if topics is None:
-        topic_list = consumer.list_topics().topics
-        if not any(topic == TOPIC for topic in topic_list):
-            log(f"{RED}Error: topic '{TOPIC}' not found in available topics. Please check your configuration.{ENDC}")
-            return
-        if not any(topic == HEARTBEAT_TOPIC for topic in topic_list):
-            log(f"{YELLOW}Heartbeat topic '{HEARTBEAT_TOPIC}' not found in available topics.{ENDC}")
-            topics = [TOPIC]
+    topic_list = consumer.list_topics().topics
+    topics_to_consume = []
+    for topic in topics or [TOPIC, HEARTBEAT_TOPIC]:
+        if not any(available_topic == topic for available_topic in topic_list):
+            log(f"{YELLOW}Topic '{topic}' not found in available topics. Skipping.{ENDC}")
         else:
-            topics = [TOPIC, HEARTBEAT_TOPIC]
+            topics_to_consume.append(topic)
 
-    consumer.subscribe(topics)
-    log(f"Subscribed to topic: {topics}")
+    consumer.subscribe(topics_to_consume)
+    log(f"Subscribed to topic: {topics_to_consume}")
     while True:
         for message in consumer.consume(timeout=1):
             if message.error():
