@@ -231,7 +231,7 @@ if __name__ == "__main__":
     FIRST_DETECTION = args.detection
     SLEEP_TIME = args.sleep_time
     if args.clean_slack:
-        from slack import delete_all_bot_messages
+        from utils.slack import delete_all_bot_messages
         delete_all_bot_messages()
 
     crossmatch_alert_to_skymaps()
