@@ -1,7 +1,7 @@
 <h1>
-    <img src="logo/nasa.png" alt="SkyPortal Logo" width="95px" align="right"/>
-    <img src="logo/skyportal.png" alt="SkyPortal Logo" width="80px" align="right"/>
-    <img src="logo/boom.png" alt="BOOM logo" width="80px" align="right"/>
+    <img src="images/nasa_logo.png" alt="SkyPortal Logo" width="95px" align="right"/>
+    <img src="images/skyportal_logo.png" alt="SkyPortal Logo" width="80px" align="right"/>
+    <img src="images/boom_logo.png" alt="BOOM logo" width="80px" align="right"/>
     <br/><br/>
     Boom Gcn Pipeline
 </h1>
