@@ -95,7 +95,6 @@ def boom_gcn_pipeline():
         if time.time() - heartbeat_timer >= HEARTBEAT_INTERVAL:
             heartbeat_timer = time.time()
             produce_gcn_heartbeat()
-            log_empty_poll = True
 
         try:
             # only check that every SLEEP_TIME seconds to avoid hitting the API
@@ -147,11 +146,11 @@ def boom_gcn_pipeline():
             # Consume new alerts passing a set of filters from Boom Kafka and crossmatch them with available skymaps
             msg = consumer.poll(timeout=10.0)
             if msg is None:
+                if new_processed_alerts:
+                    total_processed_alerts += new_processed_alerts
+                    log(f"{new_processed_alerts} new alerts processed ({total_processed_alerts} total)")
+                    new_processed_alerts = 0
                 if log_empty_poll:
-                    if new_processed_alerts:
-                        total_processed_alerts += new_processed_alerts
-                        log(f"{new_processed_alerts} new alerts processed ({total_processed_alerts} total)")
-                        new_processed_alerts = 0
                     log(f"No new alerts from Boom Kafka, waiting...")
                     log_empty_poll = False
                 continue
