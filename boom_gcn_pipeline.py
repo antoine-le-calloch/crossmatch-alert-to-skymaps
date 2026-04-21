@@ -144,7 +144,7 @@ def boom_gcn_pipeline():
                         del published_matches[obj_id]
 
             # Consume new alerts passing a set of filters from Boom Kafka and crossmatch them with available skymaps
-            msg = consumer.poll(timeout=10.0)
+            msg = consumer.poll(timeout=30.0)
             if msg is None:
                 if new_processed_alerts:
                     total_processed_alerts += new_processed_alerts
