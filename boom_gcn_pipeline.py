@@ -90,10 +90,18 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     return last_non_detection + list(reversed(filtered_photometry))
 
 
+def remember_processed_skymaps(published_matches, obj_id, processed_skymaps, first_detection_jd):
+    """Record (dateobs, created_at) of skymaps already published or rejected for an object, to avoid re-processing."""
+    if obj_id not in published_matches:
+        published_matches[obj_id] = {"skymaps": set(), "first_detection_jd": first_detection_jd}
+    published_matches[obj_id]["skymaps"].update(processed_skymaps)
+
+
 def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, published_matches, gcn=None, slack=None):
     """Crossmatch an alert with candidate skymaps and publish a notice for the new matches."""
     obj_id = alert["objectId"]
     matching_skymaps = {}
+    rejected_skymaps = set()
     notes = []
     for dateobs, skymap in candidate_skymaps.items():
         if not filtered_photometry[0]["jd"] <= skymap.jd <= filtered_photometry[1]["jd"]:
@@ -107,11 +115,14 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
             distance_info = get_distance_info(skymap, alert, filtered_photometry)
             if not is_distance_consistent(distance_info):
                 log(f"{obj_id} is in {skymap.name} but not at a consistent distance: {format_distance_info(distance_info)}")
+                rejected_skymaps.add((dateobs, skymap.created_at))
                 continue
             matching_skymaps[dateobs] = skymap
             if distance_info:
                 notes.append(f"{skymap.alias}: {format_distance_info(distance_info)}")
 
+    if rejected_skymaps:
+        remember_processed_skymaps(published_matches, obj_id, rejected_skymaps, filtered_photometry[1]["jd"])
     if not matching_skymaps:
         return
 
@@ -125,15 +136,12 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
     if slack:
         slack.send(alert, matching_skymaps, gcn_payload, notes)
 
-    # Add the object and matching skymaps to published_matches to avoid re-processing
-    dateobs_created_at_tuple = set((dateobs, skymap.created_at) for dateobs, skymap in matching_skymaps.items())
-    if obj_id not in published_matches:
-        published_matches[obj_id] = {
-            "skymaps": dateobs_created_at_tuple,
-            "first_detection_jd": filtered_photometry[1]["jd"],
-        }
-    else:
-        published_matches[obj_id]["skymaps"].update(dateobs_created_at_tuple)
+    remember_processed_skymaps(
+        published_matches,
+        obj_id,
+        {(dateobs, skymap.created_at) for dateobs, skymap in matching_skymaps.items()},
+        filtered_photometry[1]["jd"],
+    )
 
 
 def boom_gcn_pipeline(gcn=None, slack=None):
