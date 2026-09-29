@@ -26,10 +26,20 @@ SLEEP_TIME = 20 # seconds between each loop
 HEARTBEAT_INTERVAL = 120 # seconds between each heartbeat log
 
 
+def get_all_photometry(alert):
+    """Photometry of the alert and of its crossmatched objects in the other surveys, sorted by jd."""
+    photometry = list(alert.get("photometry") or [])
+    for survey_match in (alert.get("survey_matches") or {}).values():
+        if survey_match:
+            photometry += survey_match.get("photometry") or []
+    return sorted(photometry, key=lambda phot: phot["jd"])
+
+
 def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     """
-    Filter the photometry of an alert to keep only the last non-detection and all detections,
-    while also checking if the object is too old based on the SNR threshold and the first detection fallback.
+    Filter the photometry of an alert (and of its crossmatches in the other surveys) to keep only
+    the last non-detection and all detections, while also checking if the object is too old based
+    on the SNR threshold and the first detection fallback.
 
     Parameters
     ----------
@@ -47,20 +57,26 @@ def get_filtered_photometry(alert, snr_threshold, first_detection_fallback):
     """
     last_non_detection = []
     filtered_photometry = []
-    for phot in reversed(alert.get("photometry", [])):  # From the most recent to the oldest
-        if phot["programid"] != 1:
+    for phot in reversed(get_all_photometry(alert)):  # From the most recent to the oldest
+        if phot["programid"] != 1 or not phot["flux_err"]:
             continue
-        if phot["origin"] == "ForcedPhot" or not phot["flux_err"] or (phot["flux"] and phot["flux"] < 0):
-            continue # Skip forced photometry, no flux_err and negative fluxes
+        if phot["origin"] == "ForcedPhot":
+            if (phot.get("survey") or "").upper() != "LSST": # LSST alerts have no non-detections, only forced photometry
+                continue
+            is_detection = bool(phot["flux"]) and phot["flux"] / phot["flux_err"] >= snr_threshold
+        elif phot["flux"] and phot["flux"] < 0:
+            continue
+        else:
+            is_detection = bool(phot["flux"])
 
-        if phot["flux"]:  # If it's a detection
+        if is_detection:
             last_non_detection = []  # Reset last non-detection as we found a detection
             filtered_photometry.append(phot)
             if phot["flux"] / phot["flux_err"] >= snr_threshold and phot["jd"] < first_detection_fallback:
                 # If at least one detection with SNR >= snr_threshold is older than first_detection_fallback, consider the object as too old and skip it
                 return None
         elif not last_non_detection:
-            last_non_detection = [phot]
+            last_non_detection = [{**phot, "flux": None}]
 
     if not filtered_photometry and not last_non_detection:
         log(f"{RED}Alert {alert['objectId']} does not have any valid detection or non-detection.{ENDC}")
