@@ -11,6 +11,7 @@ from utils.skymap import get_skymap, get_alias
 from utils.kafka import read_avro, boom_consumer
 from utils.converter import fallback, str_to_bool
 from utils.gcn import prepare_gcn_payload
+from utils.distance import get_distance_info, is_distance_consistent, format_distance_info
 
 load_dotenv()
 
@@ -93,6 +94,7 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
     """Crossmatch an alert with candidate skymaps and publish a notice for the new matches."""
     obj_id = alert["objectId"]
     matching_skymaps = {}
+    notes = []
     for dateobs, skymap in candidate_skymaps.items():
         if not filtered_photometry[0]["jd"] <= skymap.jd <= filtered_photometry[1]["jd"]:
             continue # Skymap is not between the last non-detection and the first detection
@@ -102,7 +104,13 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
             continue # This skymap has already been processed for this object
 
         if skymap.contains(alert["ra"], alert["dec"]):
+            distance_info = get_distance_info(skymap, alert, filtered_photometry)
+            if not is_distance_consistent(distance_info):
+                log(f"{obj_id} is in {skymap.name} but not at a consistent distance: {format_distance_info(distance_info)}")
+                continue
             matching_skymaps[dateobs] = skymap
+            if distance_info:
+                notes.append(f"{skymap.alias}: {format_distance_info(distance_info)}")
 
     if not matching_skymaps:
         return
@@ -115,7 +123,7 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
     if gcn:
         gcn.produce(gcn_payload)
     if slack:
-        slack.send(alert, matching_skymaps, gcn_payload)
+        slack.send(alert, matching_skymaps, gcn_payload, notes)
 
     # Add the object and matching skymaps to published_matches to avoid re-processing
     dateobs_created_at_tuple = set((dateobs, skymap.created_at) for dateobs, skymap in matching_skymaps.items())
