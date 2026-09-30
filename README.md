@@ -16,7 +16,7 @@ This service contributes to the BOOM GCN Notices stream: it crossmatches candida
 
 ## What it does
 
-- Polls SkyPortal for recent GCN events with a `< 1000 sq. deg.` localization and builds MOCs from their skymaps.
+- Polls SkyPortal for recent GCN events with a `< 1000 sq. deg.` localization and builds MOCs from their skymaps. When GCN consumer credentials are set, GW alerts are instead received directly from the GCN `igwn.gwalert` topic, selected the same way.
 - Keeps the recent alerts in memory and crossmatches them again when a new or updated skymap arrives.
 - For GW skymaps, compares the alert with the distance along its line of sight: the match is dropped when the host galaxy distance (from the BOOM `host_galaxy` field) is outside the 99% GW distance interval, or when the peak absolute magnitude is outside [-20, -11].
 - Consumes alerts from configured BOOM Kafka filters, filters photometry (public, SNR, detections / last non-detection), and checks spatial and temporal containment against each skymap.
@@ -51,6 +51,9 @@ Edit the `.env` file to set your configuration.
 - `GCN_KAFKA_TESTING_MODE`: `true` to publish on the test stream, `false` for production.
 - `GCN_KAFKA_SERVER` / `GCN_KAFKA_USERNAME` / `GCN_KAFKA_PASSWORD` / `GCN_KAFKA_TOPIC`: production settings (`gcn.nasa.gov`, `gcn.notices.boom`).
 - `GCN_KAFKA_TEST_SERVER` / `GCN_KAFKA_TEST_USERNAME` / `GCN_KAFKA_TEST_PASSWORD` / `GCN_KAFKA_TEST_TOPIC`: test settings (`test.gcn.nasa.gov`, `gcn.notices.boom.test`).
+
+**GCN Kafka (input GW alerts, optional)**
+- `GCN_KAFKA_CONSUMER_CLIENT_ID` / `GCN_KAFKA_CONSUMER_CLIENT_SECRET`: GCN client credentials allowed to read `igwn.gwalert`. When set, GW alerts are received directly from GCN instead of SkyPortal; the other GCN events are still fetched from SkyPortal.
 
 **Slack (optional)**
 - `NOTIFY_SLACK`: set to `true` to enable Slack notifications.
