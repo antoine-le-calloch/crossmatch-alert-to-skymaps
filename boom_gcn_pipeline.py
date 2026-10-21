@@ -28,13 +28,14 @@ FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 HEARTBEAT_INTERVAL = 120 # seconds between each heartbeat log
 NS_PROBABILITY_THRESHOLD = 0.5 # minimum P(BNS) + P(NSBH) of a GW event
+PUBLIC_SURVEY_MATCHES = ("ztf", "lsst")
 
 
 def get_all_photometry(alert):
-    """Photometry of the alert and of its crossmatched objects in the other surveys, sorted by jd."""
+    """Photometry of the alert and of its crossmatched objects in the other public surveys, sorted by jd."""
     photometry = list(alert.get("photometry") or [])
-    for survey_match in (alert.get("survey_matches") or {}).values():
-        if survey_match:
+    for survey, survey_match in (alert.get("survey_matches") or {}).items():
+        if survey_match and survey in PUBLIC_SURVEY_MATCHES:
             photometry += survey_match.get("photometry") or []
     return sorted(photometry, key=lambda phot: phot["jd"])
 
