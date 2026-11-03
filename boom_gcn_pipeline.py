@@ -6,12 +6,13 @@ import traceback
 from dotenv import load_dotenv
 
 from utils.api import SkyPortal, APIError
+from utils.babamul import Babamul
 from utils.logger import log, RED, ENDC, YELLOW
 from utils.skymap import get_skymap, get_alias
 from utils.kafka import read_avro, boom_consumer
 from utils.converter import fallback, str_to_bool
 from utils.gcn import prepare_gcn_payload
-from utils.distance import get_distance_info, is_distance_consistent, format_distance_info
+from utils.distance import CREDIBLE_VOLUME, get_distance_info, is_distance_consistent, format_distance_info
 from utils.gw_alerts import get_gw_alert_listener
 from utils.published_matches import load_published_matches, save_published_matches
 
@@ -19,6 +20,8 @@ load_dotenv()
 
 SKYPORTAL_URL = os.getenv("SKYPORTAL_URL")
 SKYPORTAL_API_KEY = os.getenv("SKYPORTAL_API_KEY")
+BABAMUL_API_URL = os.getenv("BABAMUL_API_URL")
+BABAMUL_API_TOKEN = os.getenv("BABAMUL_API_TOKEN")
 BOOM_FILTERS = os.getenv("BOOM_KAFKA_FILTERS").split(",")
 NOTIFY_GCN = str_to_bool(os.getenv("NOTIFY_GCN"), default=False)
 NOTIFY_SLACK = str_to_bool(os.getenv("NOTIFY_SLACK"), default=False)
@@ -27,6 +30,7 @@ GCN = 24*6  # hours for GCN fallback
 FIRST_DETECTION = 24*5  # hours for first detection fallback
 SLEEP_TIME = 20 # seconds between each loop
 HEARTBEAT_INTERVAL = 120 # seconds between each heartbeat log
+ALERT_JD_WINDOW = 1 / 1440 # days around an alert searched in BOOM, only its own exposure
 NS_PROBABILITY_THRESHOLD = 0.5 # minimum P(BNS) + P(NSBH) of a GW event
 PUBLIC_SURVEY_MATCHES = ("ztf", "lsst")
 
@@ -102,7 +106,40 @@ def remember_processed_skymaps(published_matches, obj_id, processed_skymaps, fir
     save_published_matches(published_matches)
 
 
-def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, published_matches, gcn=None, slack=None):
+def place_in_volume(babamul, skymap, alert):
+    """
+    Place an alert in the 3D credible volume of a GW skymap with the BOOM skymap search.
+
+    The search is limited to the exposure of the alert, so that BOOM cannot truncate it, and the
+    alert is found back by its candid.
+
+    Returns
+    -------
+    tuple
+        (in_volume, credible_level): in_volume is None when BOOM could not place the alert, and
+        credible_level is the 3D credible level of its best host galaxy, or None without any host redshift.
+    """
+    if not babamul or not skymap.fits_base64:
+        return None, None
+    survey, obj_id, candid = alert["survey"], alert["objectId"], alert["candid"]
+    start_jd, end_jd = alert["jd"] - ALERT_JD_WINDOW, alert["jd"] + ALERT_JD_WINDOW
+    try:
+        found, incomplete = babamul.skymap_search(survey, skymap.fits_base64, CREDIBLE_VOLUME, start_jd, end_jd)
+        match = next((found_alert for found_alert in found if found_alert.get("candid") == candid), None)
+        if match:
+            return True, match.get("host_searched_prob_vol")
+        if incomplete:
+            log(f"{YELLOW}BOOM truncated the search of {obj_id} in {skymap.name}, it is not placed in 3D{ENDC}")
+            return None, None
+        if any(boom_alert.get("candid") == candid for boom_alert in babamul.get_alerts(survey, obj_id, start_jd, end_jd)):
+            return False, None
+        log(f"{YELLOW}BOOM does not have the alert {candid} of {obj_id}, it is not placed in 3D in {skymap.name}{ENDC}")
+    except APIError as e:
+        log(f"{YELLOW}Could not place {obj_id} in the 3D volume of {skymap.name}: {e}{ENDC}")
+    return None, None
+
+
+def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, published_matches, gcn=None, slack=None, babamul=None):
     """Crossmatch an alert with candidate skymaps and publish a notice for the new matches."""
     obj_id = alert["objectId"]
     matching_skymaps = {}
@@ -117,7 +154,8 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
             continue # This skymap has already been processed for this object
 
         if skymap.contains(alert["ra"], alert["dec"]):
-            distance_info = get_distance_info(skymap, alert, filtered_photometry)
+            in_volume, credible_level = place_in_volume(babamul, skymap, alert)
+            distance_info = get_distance_info(skymap, alert, filtered_photometry, in_volume, credible_level)
             if not is_distance_consistent(distance_info):
                 log(f"{obj_id} is in {skymap.name} but not at a consistent distance: {format_distance_info(distance_info)}")
                 rejected_skymaps.add((dateobs, skymap.created_at))
@@ -151,6 +189,9 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
 
 def boom_gcn_pipeline(gcn=None, slack=None):
     skyportal = SkyPortal(instance=SKYPORTAL_URL, token=SKYPORTAL_API_KEY)
+    babamul = Babamul(BABAMUL_API_URL, BABAMUL_API_TOKEN) if BABAMUL_API_URL and BABAMUL_API_TOKEN else None
+    if not babamul:
+        log(f"{YELLOW}No Babamul API configured, GW matches are not placed in the 3D credible volume{ENDC}")
     cumulative_probability = 0.95
     snr_threshold = 5.0
     published_matches = load_published_matches()  # {objectId: {"skymaps": set((dateobs,created_at)), "first_detection_jd": float}}
@@ -251,7 +292,7 @@ def boom_gcn_pipeline(gcn=None, slack=None):
                     if new_skymaps and recent_alerts:
                         log(f"Crossmatching {len(recent_alerts)} recent alerts with {len(new_skymaps)} new skymaps")
                         for alert, filtered_photometry in list(recent_alerts.values()):
-                            crossmatch_and_publish(alert, filtered_photometry, new_skymaps, published_matches, gcn, slack)
+                            crossmatch_and_publish(alert, filtered_photometry, new_skymaps, published_matches, gcn, slack, babamul)
 
             # Consume new alerts passing a set of filters from Boom Kafka and crossmatch them with available skymaps
             msg = consumer.poll(timeout=30.0)
@@ -283,7 +324,7 @@ def boom_gcn_pipeline(gcn=None, slack=None):
             recent_alerts[alert["objectId"]] = (alert, filtered_photometry)
 
             if skymaps:
-                crossmatch_and_publish(alert, filtered_photometry, skymaps, published_matches, gcn, slack)
+                crossmatch_and_publish(alert, filtered_photometry, skymaps, published_matches, gcn, slack, babamul)
 
         except APIError as e:
             log(e)

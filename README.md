@@ -19,7 +19,9 @@ This service contributes to the BOOM GCN Notices stream: it crossmatches candida
 - Polls SkyPortal for recent GCN events with a `< 1000 sq. deg.` localization and builds MOCs from their skymaps. When GCN consumer credentials are set, GW alerts are instead received directly from the GCN `igwn.gwalert` topic, selected the same way.
 - Keeps the recent alerts in memory and crossmatches them again when a new or updated skymap arrives.
 - Saves the published matches in `published_matches.json`, so that replaying the Kafka topic after a restart does not publish them again.
-- For GW skymaps, compares the alert with the distance along its line of sight: the match is dropped when the host galaxy distance (from the BOOM `host_galaxy` field) is outside the 99% GW distance interval, or when the peak absolute magnitude is outside [-20, -11].
+- For 3D GW skymaps, places the alert in the 3D credible volume with the Babamul skymap search: BOOM ranks the voxels of the skymap by probability per unit volume and places the alert at the redshift of its host galaxy (the one it associated, or else the best of its catalog cross-matches), giving the 3D credible level of the alert (lower is better). The search is limited to the exposure of the alert, which is found back by its candid.
+  - The match is dropped when the alert is outside the 95% credible volume, or when the peak absolute magnitude (at the host galaxy distance from the BOOM `host_galaxy` field, within its redshift error, or at the GW distance without a host) is outside [-20, -11]. An alert without any host redshift is only tested in 2D.
+  - When BOOM cannot place the alert (no Babamul token, API error, alert not in BOOM), the match is instead dropped when the whole host galaxy distance range is outside the 99% GW distance interval along its line of sight.
 - Consumes alerts from configured BOOM Kafka filters, filters photometry (public, SNR, detections / last non-detection), and checks spatial and temporal containment against each skymap.
 - For every match, produces a BOOM GCN Notice to GCN Kafka (test or production). A Slack summary with the payload JSON and a PNG of the object over each matching skymap MOC can optionally be sent.
 - Emits periodic heartbeats on the `gcn.notices.boom.heartbeat` topic.
@@ -47,6 +49,10 @@ Edit the `.env` file to set your configuration.
 - `BOOM_KAFKA_USERNAME` / `BOOM_KAFKA_PASSWORD`: credentials.
 - `BOOM_KAFKA_TOPICS`: comma-separated topics to consume from (e.g. `ZTF_alerts_results,LSST_alerts_results`).
 - `BOOM_KAFKA_FILTERS`: comma-separated BOOM filter names to keep (e.g. `public_fast_transient_ztf,public_galactic_fast_transient_ztf`).
+
+**Babamul API (3D GW crossmatch)**
+- `BABAMUL_API_URL`: Babamul API URL (e.g. `https://babamul.caltech.edu/api`).
+- `BABAMUL_API_TOKEN`: Babamul API token. Without it, GW matches are not placed in the 3D credible volume.
 
 **GCN Kafka (output notices)**
 - `GCN_KAFKA_TESTING_MODE`: `true` to publish on the test stream, `false` for production.
