@@ -139,7 +139,8 @@ def crossmatch_and_publish(alert, filtered_photometry, candidate_skymaps, publis
     if gcn:
         gcn.produce(gcn_payload)
     if slack:
-        slack.send(alert, matching_skymaps, gcn_payload, notes)
+        ts = slack.send(alert, matching_skymaps)
+        slack.send_details(ts, alert, matching_skymaps, gcn_payload, notes)
 
     remember_processed_skymaps(
         published_matches,
