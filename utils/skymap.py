@@ -1,4 +1,5 @@
 import io
+import base64
 import numpy as np
 import astropy.units as u
 import matplotlib.pyplot as plt
@@ -63,6 +64,9 @@ class Skymap:
         Area of the 90% credible region, in square degrees.
     distance : SkymapDistance or None
         Per-pixel distance of the localization, for 3D GW skymaps only.
+    fits_base64 : str or None
+        The FITS file of the localization, base64-encoded, for 3D GW skymaps only, to place the
+        alerts in its 3D credible volume with the BOOM skymap search.
     jd : float
         The Julian Date corresponding to dateobs.
     """
@@ -73,6 +77,7 @@ class Skymap:
     tags: list[str]
     area_90: float = None
     distance: SkymapDistance = None
+    fits_base64: str = field(default=None, repr=False)
     jd: float = field(init=False)
 
     def __post_init__(self):
@@ -134,12 +139,12 @@ def get_skymap(skyportal, cumulative_probability, event):
     """
     localization = event["localization"]
     if "fits" in localization:
-        bytes_io = io.BytesIO(localization["fits"])
+        content = localization["fits"]
     else:
-        bytes_io = skyportal.download_localization(
+        content = skyportal.download_localization(
             localization["dateobs"], localization["localization_name"]
-        )
-    moc, area_90, distance = read_skymap_fits(bytes_io, cumulative_probability)
+        ).getvalue()
+    moc, area_90, distance = read_skymap_fits(io.BytesIO(content), cumulative_probability)
     return Skymap(
         dateobs=event["dateobs"],
         alias=get_alias(event) or "No aliases",
@@ -148,6 +153,7 @@ def get_skymap(skyportal, cumulative_probability, event):
         tags=event.get("tags", []),
         area_90=area_90,
         distance=distance,
+        fits_base64=base64.b64encode(content).decode() if distance else None,
     )
 
 
@@ -169,15 +175,15 @@ def read_skymap_probabilities(bytes_io):
     Returns
     -------
     tuple
-        The NESTED UNIQ indices, the probability of each pixel, and the DISTMU and
-        DISTSIGMA columns ({name: None} if the skymap has no distance).
+        The NESTED UNIQ indices, the probability of each pixel, and the DISTMU,
+        DISTSIGMA and DISTNORM columns ({name: None} if the skymap has no distance).
     """
     with fits.open(bytes_io) as hdul:
         data = hdul[1].data
         columns = [col.name for col in hdul[1].columns]
         header = hdul[1].header
 
-    distance_columns = {name: None for name in ("DISTMU", "DISTSIGMA")}
+    distance_columns = {name: None for name in ("DISTMU", "DISTSIGMA", "DISTNORM")}
     if "UNIQ" in columns:
         uniq = np.asarray(data["UNIQ"], dtype=np.int64)
         prob = np.asarray(data["PROBDENSITY"]) * np.pi / (3 * 4.0**uniq_to_level_ipix(uniq)[0])
@@ -241,6 +247,7 @@ def read_skymap_fits(bytes_io, cumulative_probability):
     area_90 = get_area_90(uniq, prob)
 
     distance = None
+    # Like ligo.skymap and BOOM, a skymap is only 3D with the DISTNORM normalization of its distance ansatz
     if all(values is not None for values in distance_columns.values()):
         distance = SkymapDistance(uniq=uniq, distmu=distance_columns["DISTMU"], distsigma=distance_columns["DISTSIGMA"])
 
