@@ -7,7 +7,6 @@ from astropy.cosmology import Planck18
 from utils.converter import flux_to_mag, get_survey
 
 MIN_HOST_POSTERIOR = 0.5
-CREDIBLE_VOLUME = 0.95
 DISTANCE_QUANTILE_RANGE = (0.005, 0.995)
 ABS_MAG_RANGE = (-20.0, -11.0)
 HOST_Z_ERR_SIGMAS = 2.0
@@ -23,7 +22,6 @@ def get_host_distance(alert):
     z = host.get("z")
     if z and z > 0:
         z_err = HOST_Z_ERR_SIGMAS * (host.get("z_err") or 0)
-        # Luminosity distances, as BOOM does for its 3D placement
         distances = Planck18.luminosity_distance([z, max(z - z_err, 0), z + z_err]).to_value(u.Mpc)
         return tuple(float(distance) for distance in distances)
     return None
@@ -53,15 +51,14 @@ def get_abs_mag(peak_mag, distance):
     return peak_mag - 5 * math.log10(distance * 1e5) if peak_mag and distance > 0 else None
 
 
-def get_distance_info(skymap, alert, filtered_photometry, in_volume=None, credible_level=None):
+def get_distance_info(skymap, alert, filtered_photometry):
     """Compare the alert with the distance of a 3D skymap.
 
     Returns None if the skymap has no distance at the alert position. Otherwise, returns
     the GW distance along the line of sight, the host distance, its range from the redshift
-    error and their quantiles in the GW distance posterior (if the alert has a reliable host),
-    the placement of the alert in the 3D credible volume by BOOM (in_volume is None when BOOM
-    did not place it, credible_level is None without any host redshift), and the peak absolute
-    magnitude at the host distance, or at the GW distance without a host.
+    error, their quantiles in the GW distance posterior and the best 3D credible level over
+    that range (if the alert has a reliable host), and the peak absolute magnitude at the
+    host distance, or at the GW distance without a host.
     """
     if skymap.distance is None:
         return None
@@ -72,6 +69,10 @@ def get_distance_info(skymap, alert, filtered_photometry, in_volume=None, credib
     gw_mean, gw_std, gw_cdf = get_line_of_sight_distance(*distance)
     host = get_host_distance(alert)
     host_distance, host_min, host_max = host or (None, None, None)
+    credible_level = None
+    if host:
+        densest_host_distance = min(max(distance[0], host_min), host_max)
+        credible_level = skymap.distance.credible_level(alert["ra"], alert["dec"], densest_host_distance)
     peak_mag = get_peak_mag(alert, filtered_photometry)
     abs_mag = get_abs_mag(peak_mag, host_distance or gw_mean)
     return {
@@ -81,7 +82,6 @@ def get_distance_info(skymap, alert, filtered_photometry, in_volume=None, credib
         "host_distance_range_mpc": (host_min, host_max) if host else None,
         "host_distance_quantile": gw_cdf(host_distance) if host else None,
         "host_distance_quantile_range": (gw_cdf(host_min), gw_cdf(host_max)) if host else None,
-        "in_volume": in_volume,
         "credible_level": credible_level,
         "abs_mag": abs_mag,
         "abs_mag_range": (get_abs_mag(peak_mag, host_max), get_abs_mag(peak_mag, host_min)) if host else (abs_mag, abs_mag),
@@ -89,17 +89,11 @@ def get_distance_info(skymap, alert, filtered_photometry, in_volume=None, credib
 
 
 def is_distance_consistent(distance_info):
-    """
-    False when BOOM places the alert outside the 3D credible volume (or, when BOOM did not place it,
-    when the whole host distance range is outside the GW distance posterior), or when the whole host
-    distance range gives an implausible absolute magnitude.
-    """
+    """False when the whole host distance range is outside the GW distance posterior or gives an implausible absolute magnitude."""
     if distance_info is None:
         return True
-    if distance_info["in_volume"] is False:
-        return False
     quantiles = distance_info["host_distance_quantile_range"]
-    if distance_info["in_volume"] is None and quantiles and (quantiles[1] < DISTANCE_QUANTILE_RANGE[0] or quantiles[0] > DISTANCE_QUANTILE_RANGE[1]):
+    if quantiles and (quantiles[1] < DISTANCE_QUANTILE_RANGE[0] or quantiles[0] > DISTANCE_QUANTILE_RANGE[1]):
         return False
     brightest, faintest = distance_info["abs_mag_range"]
     if brightest is not None and brightest > ABS_MAG_RANGE[1]:
@@ -114,14 +108,8 @@ def format_distance_info(distance_info):
         low, high = distance_info["host_distance_range_mpc"]
         spread = f"{low:.0f} to {high:.0f} Mpc, " if high > low else ""
         parts.append(f"host: {distance_info['host_distance_mpc']:.0f} Mpc ({spread}quantile {distance_info['host_distance_quantile']:.3f})")
-    if distance_info["in_volume"] is None:
-        parts.append("not placed in 3D")
-    elif not distance_info["in_volume"]:
-        parts.append(f"outside the {CREDIBLE_VOLUME:.0%} 3D credible volume")
-    elif distance_info["credible_level"] is None:
-        parts.append("no host redshift (2D only)")
-    else:
-        parts.append(f"3D credible level: {distance_info['credible_level']:.3f}")
+    if distance_info["credible_level"] is not None:
+        parts.append(f"3D credible level: {distance_info['credible_level']:.2f}")
     if distance_info["abs_mag"] is not None:
         parts.append(f"peak M: {distance_info['abs_mag']:.1f}")
     return ", ".join(parts)
