@@ -23,7 +23,7 @@ This service contributes to the BOOM GCN Notices stream: it crossmatches candida
   - The match is dropped when the alert is outside the 95% credible volume, or when the peak absolute magnitude (at the host galaxy distance from the BOOM `host_galaxy` field, within its redshift error, or at the GW distance without a host) is outside [-20, -11]. An alert without any host redshift is only tested in 2D.
   - When BOOM cannot place the alert (no Babamul token, API error, alert not in BOOM), the match is instead dropped when the whole host galaxy distance range is outside the 99% GW distance interval along its line of sight.
 - Consumes alerts from configured BOOM Kafka filters, filters photometry (public, SNR, detections / last non-detection), and checks spatial and temporal containment against each skymap.
-- For every match, produces a BOOM GCN Notice to GCN Kafka (test or production). A Slack summary with the payload JSON and a PNG of the object over each matching skymap MOC can optionally be sent.
+- For every match, produces a BOOM GCN Notice to GCN Kafka (test or production). A Slack message can optionally be sent: the object and event links, its detections and a PNG of the object over each matching skymap MOC, with the distance check and the payload JSON in its thread.
 - Emits periodic heartbeats on the `gcn.notices.boom.heartbeat` topic.
 
 A `display_skymaps(obj, skymaps, plot=False)` helper is also available in `utils/skymap.py` to log (and optionally plot with matplotlib) the skymaps that match a given object.

@@ -81,7 +81,7 @@ class SkyPortal:
 
         self.session = requests.Session()
         adapter = HTTPAdapter(max_retries=Retry(
-            total=2, backoff_factor=1, status_forcelist=[500, 502, 503, 504], raise_on_status=False
+            total=4, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504], raise_on_status=False
         ))
         self.session.mount('https://', adapter)
         self.session.mount('http://', adapter)
